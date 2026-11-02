@@ -260,6 +260,38 @@ function attentionIds(hosts) {
   return hosts.flatMap((h) => [...h.folders.flatMap(allSessions), ...h.loose]).filter((s) => ATTENTION.has(s.status)).map((s) => s.id);
 }
 
+// The tray menu's Hidden from the sidebar: the hidden sessions as the sidebar would show them,
+// machine › folder › session (`hosts`: buildTree's, of the hidden sessions only). A row that opens
+// a submenu can't be clicked itself, so each machine and folder starts with Show all here.
+// `show(ids)` brings those sessions back.
+function hiddenMenu(hosts, show) {
+  const sessionItem = (s) => ({ label: `${s.nest ? '↳ ' : ''}${clip(s.title, 42)}`, click: () => show([s.id]) });
+  const group = (label, sessions, items) => ({
+    label: `${label}  (${sessions.length})`,
+    submenu: [
+      { label: sessions.length === 1 ? 'Show it' : `Show all ${sessions.length} here`, click: () => show(sessions.map((s) => s.id)) },
+      { type: 'separator' },
+      ...items,
+    ],
+  });
+  const folderItem = (n) => group(clipPath(n.label, 42), allSessions(n), [...n.sessions.map(sessionItem), ...n.children.map(folderItem)]);
+  return hosts.map((h) => {
+    const loose = h.kind === 'chat' ? h.loose.map(sessionItem)
+      : h.loose.length ? [group('No folder', h.loose, h.loose.map(sessionItem))] : [];
+    return group(h.label, [...h.folders.flatMap(allSessions), ...h.loose], [...h.folders.map(folderItem), ...loose]);
+  });
+}
+
+function clip(s, n) {
+  const t = String(s ?? '');
+  return t.length > n ? `${t.slice(0, n - 1)}…` : t;
+}
+
+// A long path keeps its end, where the folder's own name is.
+function clipPath(s, n) {
+  return s.length > n ? `…${s.slice(s.length - n + 1)}` : s;
+}
+
 function latestOf(sessions) {
   return sessions.reduce((m, s) => Math.max(m, s.lastActivityAt || 0, s.status !== 'idle' ? s.since || 0 : 0), 0);
 }
@@ -272,4 +304,4 @@ function byActivity(a, b) {
   return b.lastActivityAt - a.lastActivityAt;
 }
 
-module.exports = { buildTree, splitPath, sshMachine, attentionIds };
+module.exports = { buildTree, splitPath, sshMachine, attentionIds, hiddenMenu };

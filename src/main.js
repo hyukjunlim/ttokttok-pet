@@ -29,7 +29,7 @@ const { EtlFeature } = require('./etl/feature');
 const { WebChatsFeature } = require('./webchats/feature');
 const { PhoneFeature } = require('./phone/feature');
 const { FolderWindow, displayChoices } = require('./folder-mode');
-const { buildTree, attentionIds } = require('./folder-tree');
+const { buildTree, attentionIds, hiddenMenu } = require('./folder-tree');
 const { markNewChats, newChatLinks, placeOf, sshTargets } = require('./new-chat');
 const { settleMarks } = require('./marks');
 const { maximizeApps } = require('./maximize');
@@ -533,9 +533,10 @@ function mergeSessions() {
   if (DEBUG_CAPTURE_DIR) debugCapture(sessions);
 }
 
-// Every session under its machine and folder (folder-tree.js), less the hidden and deleted ones.
-function currentTree({ marked = currentMarks(), hidden = currentHidden(), sshHosts = sshConfigHosts() } = {}) {
-  const shown = (list) => list.filter((s) => !Object.hasOwn(hidden, s.id) && !isDeleted(s.id));
+// Every session under its machine and folder (folder-tree.js), less the hidden and deleted ones;
+// `hiddenOnly`: just the hidden ones, for the tray menu's Hidden from the sidebar.
+function currentTree({ marked = currentMarks(), hidden = currentHidden(), sshHosts = sshConfigHosts(), hiddenOnly = false } = {}) {
+  const shown = (list) => list.filter((s) => Object.hasOwn(hidden, s.id) === hiddenOnly && !isDeleted(s.id));
   return buildTree({
     claude: shown(claudeAll),
     codex: shown(codexAll),
@@ -1811,17 +1812,16 @@ function buildMenu({ markAll = false } = {}) {
       { label: 'Folder sidebar (every session, by machine and folder)', type: 'radio', checked: folderMode, click: () => setMode('folder') },
     ],
   });
-  // The sessions you hid from the sidebar, to bring back (one whose session is gone isn't listed).
+  // The sessions you hid from the sidebar, under their machine and folder, to bring back (one whose
+  // session is gone isn't listed).
   if (folderMode) {
     if (markAll) items.push(markAllItem());
-    const hidden = Object.keys(currentHidden())
-      .map((id) => [claudeAll, codexAll, webAll].reduce((found, list) => found ?? list.find((s) => s.id === id), null))
-      .filter(Boolean);
-    if (hidden.length) {
+    const count = Object.keys(currentHidden()).filter((id) => listedSession(id) && !isDeleted(id)).length;
+    if (count) {
       items.push({
-        label: `Hidden from the sidebar (${hidden.length})`,
+        label: `Hidden from the sidebar (${count})`,
         submenu: [
-          ...hidden.map((s) => ({ label: truncate(s.title, 42), click: () => setHidden([s.id], false) })),
+          ...hiddenMenu(currentTree({ hiddenOnly: true }), (ids) => setHidden(ids, false)),
           { type: 'separator' },
           { label: 'Show them all', click: () => setHidden(null) },
         ],
@@ -2031,11 +2031,6 @@ function debugCapture(list) {
     fs.writeFileSync(path.join(DEBUG_CAPTURE_DIR, `capture-${String(n).padStart(2, '0')}-${status}.png`), image.toPNG());
     log(`captured ${status} (${list.length} sessions), window ${JSON.stringify(win.getBounds())}, menu items ${buildMenu().items.length}`);
   }, 1800);
-}
-
-function truncate(s, n) {
-  const t = String(s ?? '');
-  return t.length > n ? `${t.slice(0, n - 1)}…` : t;
 }
 
 // ---------------------------------------------------------------- updates (see updater.js)

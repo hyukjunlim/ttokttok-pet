@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildTree, splitPath, attentionIds } = require('../src/folder-tree');
+const { buildTree, splitPath, attentionIds, hiddenMenu } = require('../src/folder-tree');
 
 const NOW = Date.parse('2026-10-25T00:00:00Z');
 const ago = (days) => NOW - days * 24 * 60 * 60 * 1000;
@@ -199,4 +199,22 @@ test('a fork sits right under the session it came from, and a family where its n
 test('forks that name each other in a loop are still listed, once each', () => {
   const [pc] = build([claude('a', 'C:\\x', { forkOf: 'b' }), claude('b', 'C:\\x', { forkOf: 'a', lastActivityAt: ago(0.5) })], []);
   assert.deepEqual(pc.folders[0].sessions.map((s) => s.title).sort(), ['a', 'b']);
+});
+
+test('the hidden sessions are listed by machine and folder, each with Show all here', () => {
+  const hosts = build(
+    [claude('pet', 'C:\\Users\\me\\pet'), claude('pet-old', 'C:\\Users\\me\\pet\\old'), claude('lab-run', '/data/me/run', onLab)],
+    [codex('wsl-chat', '/home/me/notes')],
+  );
+  const shown = [];
+  const menu = hiddenMenu(hosts, (ids) => shown.push(ids));
+  const shape = (items) => items.map((i) => (i.submenu ? [i.label, shape(i.submenu)] : i.label ?? '—'));
+  assert.deepEqual(shape(menu), [
+    ['Local  (2)', ['Show all 2 here', '—', ['C:\\Users\\me\\pet  (2)', ['Show all 2 here', '—', 'pet', ['old  (1)', ['Show it', '—', 'pet-old']]]]]],
+    ['WSL  (1)', ['Show it', '—', ['/home/me/notes  (1)', ['Show it', '—', 'wsl-chat']]]],
+    ['lab  (1)', ['Show it', '—', ['/data/me/run  (1)', ['Show it', '—', 'lab-run']]]],
+  ]);
+  menu[0].submenu[0].click();                       // Local's Show all here
+  menu[0].submenu[2].submenu[3].submenu[2].click();  // pet-old alone
+  assert.deepEqual(shown, [['pet', 'pet-old'], ['pet-old']]);
 });
