@@ -27,6 +27,7 @@ const { archiveCodexChat, canDelete, deleteClaudeSession, isChat } = require('./
 const { watchWindowOrder } = require('./window-order');
 const { EtlFeature } = require('./etl/feature');
 const { SlackFeature } = require('./slack/feature');
+const { TodomateFeature } = require('./todomate/feature');
 const { WebChatsFeature } = require('./webchats/feature');
 const { PhoneFeature } = require('./phone/feature');
 const { FolderWindow, displayChoices } = require('./folder-mode');
@@ -92,6 +93,7 @@ let tracker;
 let codex = null;               // Codex threads, when Codex is installed and shown
 let etl = null;                 // SNU eTL notices, when turned on (see etl/feature.js)
 let slack = null;               // presentation reminders from a Slack canvas, when turned on (see slack/feature.js)
+let todomate = null;            // today's TodoMate schedule, when turned on (see todomate/feature.js)
 let webchats = null;            // claude.ai and ChatGPT chats, when turned on (see webchats/feature.js)
 let phone = null;               // the sidebar on your phone, when turned on (see phone/feature.js)
 let win = null;
@@ -110,6 +112,7 @@ let claudeSessions = [];
 let codexSessions = [];
 let etlSessions = [];
 let slackSessions = [];
+let todomateSessions = [];
 let webSessions = [];
 let folder = null;              // folder mode's sidebar (see folder-mode.js)
 let stepKeys = null;            // Ctrl+Tab through the sidebar (see step-keys.js)
@@ -521,7 +524,7 @@ function sendSessions() {
   // Folder mode: the pet acts out the most urgent session, as the floating pet does, and eTL's
   // notices sit under the tree.
   folder?.send('folder:status', sessions[0]?.status || 'idle');
-  folder?.send('folder:notices', [...etlSessions, ...slackSessions]);
+  folder?.send('folder:notices', [...etlSessions, ...slackSessions, ...todomateSessions]);
   if (!win || win.isDestroyed()) return;
   // Getting started's practice bubble goes first, and shows even with the bubbles turned off.
   const practice = gettingStarted?.petItems() ?? [];
@@ -530,7 +533,7 @@ function sendSessions() {
 }
 
 function mergeSessions() {
-  sessions = [...claudeSessions, ...codexSessions, ...etlSessions, ...slackSessions, ...webSessions].filter((s) => !isDeleted(s.id)).sort(compareSessions);
+  sessions = [...claudeSessions, ...codexSessions, ...etlSessions, ...slackSessions, ...todomateSessions, ...webSessions].filter((s) => !isDeleted(s.id)).sort(compareSessions);
   sendSessions();
   phone?.changed();
   phone?.observe(sessions, currentHidden());
@@ -963,6 +966,26 @@ function startSlack() {
   slack.start();
 }
 
+// `--todomate-clock=HH:MM`, for trying the TodoMate bubbles: their clock starts at that time today
+// (KST) and runs on from there. A restart from the tray menu goes back to the real time.
+function todomateClock() {
+  const m = /^--todomate-clock=([01]?\d|2[0-3]):([0-5]\d)$/.exec(process.argv.find((a) => a.startsWith('--todomate-clock=')) || '');
+  if (!m) return Date.now;
+  const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+  const offset = Date.parse(`${today}T${m[1].padStart(2, '0')}:${m[2]}:00+09:00`) - Date.now();
+  log(`todomate: clock set to ${m[1]}:${m[2]} KST`);
+  return () => Date.now() + offset;
+}
+
+function startTodomate() {
+  todomate = new TodomateFeature({ electron: { app, clipboard, dialog, powerMonitor, safeStorage, shell }, settings, log, now: todomateClock() });
+  todomate.on('change', (list) => {
+    todomateSessions = list;
+    mergeSessions();
+  });
+  todomate.start();
+}
+
 function startWebChats() {
   webchats = new WebChatsFeature({
     electron: { dialog, shell },
@@ -1002,7 +1025,7 @@ function startPhone() {
     .catch((err) => log('phone:', err.message));
 }
 
-// What the phone page shows: the sidebar's tree, eTL's and Slack's notices and the weekly limits. A Claude
+// What the phone page shows: the sidebar's tree, eTL's, Slack's and TodoMate's notices and the weekly limits. A Claude
 // session opens at its Remote Control session: the one its running process is connected to, else
 // the one the desktop app connected it to last (an SSH session's process runs on the host).
 function phoneSnapshot() {
@@ -1014,7 +1037,7 @@ function phoneSnapshot() {
   }
   return {
     hosts: currentTree(),
-    notices: [...etlSessions, ...slackSessions],
+    notices: [...etlSessions, ...slackSessions, ...todomateSessions],
     usage: settings.get('showUsage') ? currentUsage() : [],
     linkOf: (id) => links.get(id) ?? null,
   };
@@ -1050,6 +1073,7 @@ function appIcon(size) {
 function trackerFor(id) {
   if (String(id).startsWith('etl:')) return etl;
   if (String(id).startsWith('slack:')) return slack;
+  if (String(id).startsWith('todomate:')) return todomate;
   if (String(id).startsWith('web:')) return webchats;
   return String(id).startsWith('codex:') ? codex : tracker;
 }
@@ -1527,6 +1551,12 @@ function openSession(id, { handoff = true, fill = false } = {}) {
   const open = (url) => openApp(url, { handoff });
   if (s?.kind === 'etl' && s.assistant) return Boolean(etl?.openAssistant(open));   // the eTL chat
   if (s?.kind === 'web') return openWebChat(s, { handoff });
+  if (s?.kind === 'todomate' && todomate?.open(id)) return true;   // its connection bubble
+  if (s?.clearOnClick) {   // a D-X countdown (Slack's, TodoMate's): seen, so it goes until tomorrow
+    trackerFor(s.id)?.dismiss(s.id);
+    return true;
+  }
+  if (s?.kind === 'todomate') return true;   // a schedule item: nothing to open, only × closes it
   const url = s && sessionUrl(s);
   if (!url) return false;
   if (url.startsWith('vscode://')) openInVsCode(listedSession(id) ?? s, url, { handoff });
@@ -2009,6 +2039,7 @@ function sourcesMenu() {
   if (webchats) items.push(webchats.menu());
   if (etl) items.push(etl.menu());
   if (slack) items.push(slack.menu());
+  if (todomate) items.push(todomate.menu());
   return items.length ? { label: 'Sources', submenu: items } : null;
 }
 
@@ -2359,6 +2390,7 @@ if (!app.requestSingleInstanceLock()) {
     startCodex();
     if (!DEMO) startEtl();
     if (!DEMO) startSlack();
+    if (!DEMO) startTodomate();
     if (!DEMO) startWebChats();
     if (!DEMO) startPhone();
     if (!DEMO) {
@@ -2429,6 +2461,7 @@ if (!app.requestSingleInstanceLock()) {
     codex?.stop();
     etl?.stop();
     slack?.stop();
+    todomate?.stop();
     webchats?.stop();
     phone?.stop();
     claudeUsage?.stop();

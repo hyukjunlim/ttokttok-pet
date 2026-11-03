@@ -54,38 +54,42 @@ test('a pipe escaped in a cell stays in it', () => {
   assert.equal(s.rows[0].cells['발표'].live, '홍길동 | 리허설');
 });
 
-test('reminders: D-7, D-3 and D-1 at 09:00, the day itself at 08:00, each until the next', () => {
+test('reminders: a D-X for each turn to come, every morning from 06:00 until the next morning', () => {
   const turns = turnsOf(parseSchedule(CANVAS), '홍길동');
-  const at = (when) => reminderItems(turns, kst(when), { url: URL, title: '발표 순서' }).map((r) => r.badge);
-  assert.deepEqual(at('2026-11-03T08:59:00'), []);
-  assert.deepEqual(at('2026-11-03T09:00:00'), ['발표 D-7']);
-  assert.deepEqual(at('2026-11-06T23:00:00'), ['발표 D-7']);
-  assert.deepEqual(at('2026-11-07T09:00:00'), ['발표 D-3']);
-  assert.deepEqual(at('2026-11-09T09:00:00'), ['발표 D-1']);
-  assert.deepEqual(at('2026-11-10T07:59:00'), ['발표 D-1']);
-  assert.deepEqual(at('2026-11-10T08:00:00'), ['발표 당일']);
-  assert.deepEqual(at('2026-11-10T11:00:00'), []);
+  const at = (when) => reminderItems(turns, kst(when), { url: URL, title: '발표 순서' }).map((r) => `${r.badge} ${r.title}`);
+  assert.deepEqual(at('2026-11-03T12:00:00'), ['D-7 11/10(화) 짧은 발표 2', 'D-49 12/22(화) 긴 발표', 'D-58 12/31(목) 긴 발표']);
+  assert.deepEqual(at('2026-11-04T05:59:00'), ['D-7 11/10(화) 짧은 발표 2', 'D-49 12/22(화) 긴 발표', 'D-58 12/31(목) 긴 발표']);   // yesterday's until 06:00
+  assert.deepEqual(at('2026-11-04T06:00:00'), ['D-6 11/10(화) 짧은 발표 2', 'D-48 12/22(화) 긴 발표', 'D-57 12/31(목) 긴 발표']);
+  assert.deepEqual(at('2026-11-10T06:00:00'), ['D-Day 11/10(화) 짧은 발표 2', 'D-42 12/22(화) 긴 발표', 'D-51 12/31(목) 긴 발표']);
+  assert.deepEqual(at('2026-11-10T11:00:00'), ['D-42 12/22(화) 긴 발표', 'D-51 12/31(목) 긴 발표']);   // the turn is over
 
-  const [r] = reminderItems(turns, kst('2026-11-07T12:00:00'), { url: URL, title: '발표 순서' });
-  assert.equal(r.id, 'slack:remind:2026-11-10:짧은 발표 2:d3');
-  assert.equal(r.kind, 'slack');
-  assert.equal(r.title, '11/10(화) 짧은 발표 2');
-  assert.equal(r.project, '10:00-11:00 · 발표 순서');
-  assert.equal(r.url, URL);
-  assert.equal(r.since, kst('2026-11-07T09:00:00'));
-  assert.equal(r.expiresAt, kst('2026-11-09T09:00:00'));
+  const [d7, d49] = reminderItems(turns, kst('2026-11-03T12:00:00'), { url: URL, title: '발표 순서' });
+  assert.equal(d7.id, 'slack:remind:2026-11-10:짧은 발표 2:d7');      // a milestone day: the phone pushes it
+  assert.equal(d7.status, 'review');
+  assert.equal(d49.id, 'slack:daily:2026-12-22:긴 발표:2026-11-03');  // any other day: it doesn't
+  assert.equal(d49.status, 'idle');
+  assert.equal(d7.kind, 'slack');
+  assert.equal(d7.project, '10:00-11:00 · 발표 순서');
+  assert.equal(d7.url, URL);
+  assert.equal(d7.clearOnClick, true);
+  assert.equal(d7.since, kst('2026-11-03T06:00:00'));
+  assert.equal(d7.expiresAt, kst('2026-11-04T06:00:00'));
+  const [day] = reminderItems(turns, kst('2026-11-10T07:00:00'));
+  assert.equal(day.status, 'waiting');
+  assert.equal(day.expiresAt, kst('2026-11-10T11:00:00'));
 });
 
-test('a closed reminder stays hidden until it is due to go; the next one shows anyway', () => {
-  const turns = turnsOf(parseSchedule(CANVAS), '홍길동');
-  const hidden = { 'slack:remind:2026-11-10:짧은 발표 2:d3': kst('2026-11-09T09:00:00') };
-  assert.deepEqual(reminderItems(turns, kst('2026-11-08T12:00:00'), { hidden }), []);
-  assert.equal(reminderItems(turns, kst('2026-11-09T09:00:00'), { hidden })[0].badge, '발표 D-1');
+test('a cleared reminder stays hidden until the next morning, which brings the next one', () => {
+  const turns = turnsOf(parseSchedule(CANVAS), '홍길동').slice(0, 1);
+  const hidden = { 'slack:remind:2026-11-10:짧은 발표 2:d3': kst('2026-11-08T06:00:00') };
+  assert.deepEqual(reminderItems(turns, kst('2026-11-07T12:00:00'), { hidden }), []);
+  assert.equal(reminderItems(turns, kst('2026-11-08T06:00:00'), { hidden })[0].badge, 'D-2');
 });
 
-test('nextChangeAt: the next reminder to start or turn to end', () => {
+test('nextChangeAt: the next morning, or a turn ending first', () => {
   const turns = turnsOf(parseSchedule(CANVAS), '홍길동');
-  assert.equal(nextChangeAt(turns, kst('2026-11-03T12:00:00')), kst('2026-11-07T09:00:00'));
+  assert.equal(nextChangeAt(turns, kst('2026-11-03T12:00:00')), kst('2026-11-04T06:00:00'));
+  assert.equal(nextChangeAt(turns, kst('2026-11-04T03:00:00')), kst('2026-11-04T06:00:00'));
   assert.equal(nextChangeAt(turns, kst('2026-11-10T10:30:00')), kst('2026-11-10T11:00:00'));
   assert.equal(nextChangeAt([], 0), Infinity);
 });

@@ -47,7 +47,8 @@ test('the first check finds your turns and shows the reminder due now, without �
   tracker.start();
   await tracker.checkNow();
   assert.deepEqual(tracker.turns().map((x) => x.key), ['2026-11-10:짧은 발표', '2026-12-22:긴 발표']);
-  assert.deepEqual(ids(env.lists.at(-1)), ['slack:remind:2026-11-10:짧은 발표:d7']);
+  assert.deepEqual(ids(env.lists.at(-1)), ['slack:remind:2026-11-10:짧은 발표:d7', 'slack:daily:2026-12-22:긴 발표:2026-11-03']);
+  assert.deepEqual(env.lists.at(-1).map((it) => it.badge), ['D-7', 'D-49']);
   tracker.stop();
 });
 
@@ -70,13 +71,33 @@ test('a later check that sees a turn move shows 순서 변경; the state survive
   second.stop();
 });
 
-test('closing a reminder hides it until the next one takes over', async (t) => {
+test('clearing a reminder hides it until the next morning, even after a restart', async (t) => {
   const { env, make } = setUp(t, { markdown: table([ROW_1110]) });
   const tracker = make();
   tracker.start();
   await tracker.checkNow();
   tracker.dismiss('slack:remind:2026-11-10:짧은 발표:d7');
   assert.deepEqual(ids(env.lists.at(-1)), []);
+  tracker.stop();
+  const again = make();
+  again.start();
+  assert.deepEqual(ids(env.lists.at(-1)), []);
+  env.now = kst('2026-11-04T06:00:00');
+  again.publish();
+  assert.deepEqual(ids(env.lists.at(-1)), ['slack:daily:2026-11-10:짧은 발표:2026-11-04']);
+  again.dismiss('slack:daily:2026-11-10:짧은 발표:2026-11-04');
+  assert.deepEqual(ids(env.lists.at(-1)), []);
+  env.now = kst('2026-11-07T06:00:00');
+  again.publish();
+  assert.deepEqual(ids(env.lists.at(-1)), ['slack:remind:2026-11-10:짧은 발표:d3']);
+  again.stop();
+});
+
+test('a milestone day (D-3) keeps a slack:remind: id, which the phone pushes', async (t) => {
+  const { env, make } = setUp(t, { markdown: table([ROW_1110]) });
+  const tracker = make();
+  tracker.start();
+  await tracker.checkNow();
   env.now = kst('2026-11-07T09:00:00');
   tracker.publish();
   assert.deepEqual(ids(env.lists.at(-1)), ['slack:remind:2026-11-10:짧은 발표:d3']);

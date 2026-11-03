@@ -37,6 +37,10 @@ const DEFAULTS = {
   slackEnabled: false,     // remind of your presentation turns from a Slack canvas (needs a token)
   slackCanvasUrl: null,    // ... that canvas's link (https://<workspace>.slack.com/docs/T…/F…)
   slackName: null,         // ... and your name as the canvas's table writes it
+  todomateEnabled: false,  // today's timed items of one TodoMate category, through Kakao PlayMCP (needs a sign-in)
+  todomateCategory: null,  // ... that category's title; null: Schedule
+  todomateDdayCategory: null, // ... and the one whose dated items count down; null: D-Day
+  todomateHidden: {},      // ... bubble id -> until when it stays hidden (×, or a click on a countdown)
   webChats: false,         // claude.ai and ChatGPT chats, from the browser extension
   phone: false,            // the sidebar on your phone, with notifications (phone/feature.js)
   phonePort: null,         // ... the local port it serves on; null: 47823

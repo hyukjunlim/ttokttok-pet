@@ -44,6 +44,7 @@ function pushEvents(memory, sessions, now = Date.now(), muted = () => false) {
   const events = [];
   for (const s of sessions) {
     if (!s?.id) continue;
+    if (s.kind === 'todomate') continue;   // today's TodoMate schedule shows, but never buzzes
     if (s.kind === 'etl' || s.kind === 'slack') {
       if (!etl.has(s.id)) {
         etl.set(s.id, now);

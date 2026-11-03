@@ -4,9 +4,9 @@
 // rules), the way EtlTracker keeps eTL's.
 //
 // Each check downloads the canvas, finds your turns, and compares them with the last check's: a
-// turn that appeared or went gets a 순서 변경 bubble for 3 days. The reminders (D-7, D-3, D-1, 당일)
+// turn that appeared or went gets a 순서 변경 bubble for 3 days. The reminders (a D-X each morning)
 // are made afresh from the last check's turns whenever the bubbles are drawn, so a check that
-// fails doesn't lose one; closing a reminder hides it until the next one takes over. A token Slack
+// fails doesn't lose one; clearing a reminder hides it until the next morning's. A token Slack
 // turns down, or a table that no longer has its 날짜 and 상태 columns, gets a bubble saying so, and
 // the last turns found keep their reminders meanwhile. All of it lives in one state file
 // (userData/slack-state.json), written atomically:
@@ -28,6 +28,7 @@ const MAX_ITEMS = 20;
 const MAX_TIMEOUT_MS = 2 ** 31 - 1;             // setTimeout's limit
 const TOKEN_ID = 'slack:token';
 const FORMAT_ID = 'slack:format';
+const REMINDER_ID = /^slack:(remind|daily):/;
 
 function statusItem(id, { status, badge, title, project, url, now }) {
   return { id, kind: 'slack', status, badge, title, project, detail: project, url, since: now, expiresAt: Infinity };
@@ -114,7 +115,7 @@ class SlackTracker extends EventEmitter {
   dismiss(id) {
     if (!this.running || !String(id).startsWith('slack:')) return;
     const now = this.now();
-    if (String(id).startsWith('slack:remind:')) {   // until the next reminder takes over
+    if (REMINDER_ID.test(id)) {   // until the next morning's reminder
       const shown = this.reminders(now).find((it) => it.id === id);
       if (!shown) return;
       this.state.hidden = { ...this.liveHidden(now), [id]: shown.expiresAt };
@@ -285,7 +286,7 @@ class SlackTracker extends EventEmitter {
           .map((it) => ({ ...it, expiresAt: it.expiresAt ?? Infinity }))
         : [];
       s.hidden = j.hidden && typeof j.hidden === 'object'
-        ? Object.fromEntries(Object.entries(j.hidden).filter(([id, until]) => id.startsWith('slack:remind:') && Number.isFinite(until)))
+        ? Object.fromEntries(Object.entries(j.hidden).filter(([id, until]) => REMINDER_ID.test(id) && Number.isFinite(until)))
         : {};
       s.lastChecked = Number.isFinite(j.lastChecked) ? j.lastChecked : null;
     }

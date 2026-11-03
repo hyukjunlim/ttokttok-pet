@@ -6,10 +6,10 @@
 // which the app takes if it's installed. Either way only a tap on the link itself opens the app.
 
 (() => {
-  const NAMES = { claude: 'Claude', chatgpt: 'ChatGPT', gemini: 'Gemini', learningx: 'LearningX', slack: 'Slack' };
+  const NAMES = { claude: 'Claude', chatgpt: 'ChatGPT', gemini: 'Gemini', learningx: 'LearningX', slack: 'Slack', todomate: 'TodoMate' };
   // The site each app opens at; an address anywhere else gets no link. Slack's is the workspace's
   // own (<workspace>.slack.com).
-  const SITES = { claude: 'claude.ai', chatgpt: 'chatgpt.com', gemini: 'gemini.google.com', learningx: 'myetl.snu.ac.kr' };
+  const SITES = { claude: 'claude.ai', chatgpt: 'chatgpt.com', gemini: 'gemini.google.com', learningx: 'myetl.snu.ac.kr', todomate: 'www.todomate.net' };
   const SLACK_HOST = /^[a-z0-9-]+\.(enterprise\.)?slack\.com$/;
   // The apps' Android packages. LearningX Student 2.0 is the one on Google Play (Xinics).
   const PACKAGES = {
@@ -18,6 +18,7 @@
     gemini: 'com.google.android.apps.bard',
     learningx: 'com.instructure.candroid.xinics2.production',
     slack: 'com.Slack',
+    todomate: 'com.undefined.mate',
   };
   // eTL's own pages don't open LearningX (it's Canvas Student underneath, which takes no https
   // links to eTL); it takes the same address under Canvas Student's scheme instead.

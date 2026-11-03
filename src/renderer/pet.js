@@ -144,10 +144,11 @@
     const codex = s.kind === 'codex';
     const etl = s.kind === 'etl';
     const slack = s.kind === 'slack';    // a presentation reminder from a Slack canvas
+    const todomate = s.kind === 'todomate';   // an item of today's TodoMate schedule
     const web = s.kind === 'web';        // a claude.ai, ChatGPT or Gemini chat in the browser
     const cli = s.kind === 'cli';        // Claude Code in VS Code or a terminal
     const client = s.client === 'vscode' ? 'VS Code' : 'Terminal';   // ... and Codex's chats there
-    const source = web ? s.siteName || s.site : etl ? 'eTL' : slack ? 'Slack' : codex ? (s.client ? `Codex · ${client}` : 'Codex')
+    const source = web ? s.siteName || s.site : etl ? 'eTL' : slack ? 'Slack' : todomate ? 'TodoMate' : codex ? (s.client ? `Codex · ${client}` : 'Codex')
       : s.kind === 'practice' ? 'Ttokttok Pet' : cli ? client : 'Claude';
     // No hover tooltip (it pops up over the other bubbles); screen readers still get the details.
     const where = s.remote ? (codex ? `on ${s.remote}` : `SSH · ${s.remote}`) : '';
@@ -155,6 +156,8 @@
     const action = (cli || (codex && s.client)) && s.client !== 'vscode' ? 'Terminal session (no link)'
       : codex && s.client ? 'Click to open in VS Code'
       : etl && !s.assistant && !ETL_LINK.test(s.url || '') ? 'eTL notice (no link)'
+        : s.clearOnClick ? 'Click to clear until tomorrow'
+        : todomate ? 'TodoMate schedule (no link)'
         : slack && !s.url ? 'Slack reminder (no link)'
           : `Click to open in ${web ? 'the browser' : source}`;
     el.setAttribute('aria-label', [s.title, s.detail, where, action].filter(Boolean).join(', '));

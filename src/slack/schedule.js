@@ -26,14 +26,12 @@ const TIME_RE = /^(\d{1,2}):(\d{2})\s*[-~–]\s*(\d{1,2}):(\d{2})$/;
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 const PROJECT_LIMIT = 80;
 
-// Each turn's reminders, in order: from when on each shows, and how it looks. A reminder stays
-// until the next one takes over, the day's until the presentation ends.
-const STAGES = [
-  { key: 'd7', days: 7, at: '09:00', badge: '발표 D-7', status: 'review' },
-  { key: 'd3', days: 3, at: '09:00', badge: '발표 D-3', status: 'review' },
-  { key: 'd1', days: 1, at: '09:00', badge: '발표 D-1', status: 'waiting' },
-  { key: 'd0', days: 0, at: '08:00', badge: '발표 당일', status: 'waiting' },
-];
+// Each turn still to come gets one reminder a day, from SHOW_AT until the next morning's (the day's
+// until the presentation ends): D-12, …, D-1, D-Day. The milestone days stand out and are the ones
+// the phone pushes (their ids are slack:remind:…; the other days' are slack:daily:…).
+const SHOW_AT = '06:00';
+const MILESTONES = { 7: 'review', 3: 'review', 1: 'waiting', 0: 'waiting' };
+const dLabel = (n) => (n === 0 ? 'D-Day' : `D-${n}`);
 
 class ScheduleFormatError extends Error {
   constructor(message) {
@@ -138,48 +136,52 @@ function dayLabel(turn) {
   return `${Number(m)}/${Number(d)}(${turn.weekday})`;
 }
 
-const showAt = (turn, stage) => kstMs(addDays(turn.date, -stage.days), stage.at);
+// The day whose reminders show at `now`: today from SHOW_AT on, yesterday before then.
+function reminderDay(now) {
+  const today = new Date(now + KST_OFFSET_MS).toISOString().slice(0, 10);
+  return now >= kstMs(today, SHOW_AT) ? today : addDays(today, -1);
+}
 
-// The reminder showing now for each turn still to come, or none: the latest stage that has
-// started, until the next one starts (or the presentation ends). `hidden`: id -> until when a
-// closed one stays out of sight. `url`: the canvas, which a bubble opens. `title`: the canvas's.
+const daysBetween = (from, to) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / DAY_MS);
+
+// This morning's reminder for each turn still to come. Clicking one clears it until the next
+// morning (`clearOnClick`, main.js); `hidden`: id -> until when a cleared one stays out of sight.
+// `url`: the canvas. `title`: the canvas's.
 function reminderItems(turns, now, { hidden = {}, url = null, title = '' } = {}) {
+  const day = reminderDay(now);
+  const since = kstMs(day, SHOW_AT);
+  const nextMorning = kstMs(addDays(day, 1), SHOW_AT);
   const out = [];
   for (const turn of turns || []) {
     if (!(turn.endAt > now)) continue;
-    const i = STAGES.findLastIndex((s) => showAt(turn, s) <= now);
-    if (i < 0) continue;
-    const stage = STAGES[i];
-    const id = `slack:remind:${turn.key}:${stage.key}`;
+    const n = daysBetween(day, turn.date);
+    if (n < 0) continue;
+    const milestone = Object.hasOwn(MILESTONES, n);
+    const id = milestone ? `slack:remind:${turn.key}:d${n}` : `slack:daily:${turn.key}:${day}`;
     if (hidden[id] > now) continue;
-    const next = STAGES[i + 1];
-    const expiresAt = next ? Math.min(showAt(turn, next), turn.endAt) : turn.endAt;
     const when = [dayLabel(turn), turn.time].filter(Boolean).join(' ');
     out.push({
       id,
       kind: 'slack',
-      status: stage.status,
-      badge: stage.badge,
+      status: milestone ? MILESTONES[n] : 'idle',
+      badge: dLabel(n),
       title: `${dayLabel(turn)} ${turn.column}`,
       project: clip([turn.time, title].filter(Boolean).join(' · '), PROJECT_LIMIT),
-      detail: clip(`${when} · ${turn.column}${title ? ` · ${title}` : ''}`, 300),
+      detail: clip(`${dLabel(n)} ${when} · ${turn.column}${title ? ` · ${title}` : ''}`, 300),
       url,
-      since: showAt(turn, stage),
-      expiresAt,
+      clearOnClick: true,
+      since,
+      expiresAt: Math.min(nextMorning, turn.endAt),
     });
   }
   return out;
 }
 
-// When the reminders next change by the clock alone: a stage starting, or a turn ending.
+// When the reminders next change by the clock alone: the next morning, or a turn ending.
 function nextChangeAt(turns, now) {
-  const times = [];
-  for (const turn of turns || []) {
-    if (!(turn.endAt > now)) continue;
-    times.push(turn.endAt);
-    for (const s of STAGES) if (showAt(turn, s) > now) times.push(showAt(turn, s));
-  }
-  return times.length ? Math.min(...times) : Infinity;
+  const upcoming = (turns || []).filter((t) => t.endAt > now);
+  if (!upcoming.length) return Infinity;
+  return Math.min(kstMs(addDays(reminderDay(now), 1), SHOW_AT), ...upcoming.map((t) => t.endAt));
 }
 
 // 순서 변경 bubbles: your turns still to come that appeared or went since the last check. A date
@@ -216,7 +218,7 @@ function changeItems(prevTurns, turns, now, { url = null, title = '' } = {}) {
 module.exports = {
   NORMAL,
   NOTICE_TTL_MS,
-  STAGES,
+  SHOW_AT,
   ScheduleFormatError,
   changeItems,
   dayLabel,
