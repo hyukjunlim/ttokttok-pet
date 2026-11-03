@@ -102,5 +102,12 @@ Hard constraints for Ttokttok Pet. Change them only with the owner's approval.
 - No phone push.
 - Works only while the PC is on and awake.
 
+## Personal data
+- The repository never holds real personal data, the user's or anyone else's: no names, account,
+  workspace or conversation identifiers, tokens, addresses, schedules, todo text, chat titles or
+  other content taken from real accounts.
+- Tests, examples, comments, commit messages and docs use made-up values only (홍길동,
+  `example.com`, `13:00 팀 미팅`).
+
 ## Release
 - A `v<version>` tag matches the version in `package.json`.
