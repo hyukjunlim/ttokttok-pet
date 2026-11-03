@@ -6,15 +6,18 @@
 // which the app takes if it's installed. Either way only a tap on the link itself opens the app.
 
 (() => {
-  const NAMES = { claude: 'Claude', chatgpt: 'ChatGPT', gemini: 'Gemini', learningx: 'LearningX' };
-  // The site each app opens at; an address anywhere else gets no link.
+  const NAMES = { claude: 'Claude', chatgpt: 'ChatGPT', gemini: 'Gemini', learningx: 'LearningX', slack: 'Slack' };
+  // The site each app opens at; an address anywhere else gets no link. Slack's is the workspace's
+  // own (<workspace>.slack.com).
   const SITES = { claude: 'claude.ai', chatgpt: 'chatgpt.com', gemini: 'gemini.google.com', learningx: 'myetl.snu.ac.kr' };
+  const SLACK_HOST = /^[a-z0-9-]+\.(enterprise\.)?slack\.com$/;
   // The apps' Android packages. LearningX Student 2.0 is the one on Google Play (Xinics).
   const PACKAGES = {
     claude: 'com.anthropic.claude',
     chatgpt: 'com.openai.chatgpt',
     gemini: 'com.google.android.apps.bard',
     learningx: 'com.instructure.candroid.xinics2.production',
+    slack: 'com.Slack',
   };
   // eTL's own pages don't open LearningX (it's Canvas Student underneath, which takes no https
   // links to eTL); it takes the same address under Canvas Student's scheme instead.
@@ -28,7 +31,8 @@
     } catch {
       return null;
     }
-    if (u.protocol !== 'https:' || u.host !== SITES[open.app]) return null;
+    const site = open.app === 'slack' ? SLACK_HOST.test(u.host) : u.host === SITES[open.app];
+    if (u.protocol !== 'https:' || !site) return null;
     if (!ANDROID) return u.href;
     return `intent://${u.host}${u.pathname}${u.search}#Intent;scheme=${SCHEMES[open.app] || 'https'};package=${PACKAGES[open.app]};`
       + `S.browser_fallback_url=${encodeURIComponent(u.href)};end`;

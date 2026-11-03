@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'; form-action 'none'; base-uri 'none'">
+  <title>Slack 발표 알림</title>
+  <link rel="stylesheet" href="etl-token.css">
+  <link rel="stylesheet" href="slack-setup.css">
+</head>
+<body>
+  <form id="form" autocomplete="off" novalidate>
+    <h1>Slack 발표 순서 알림</h1>
+    <p>Slack 캔버스의 발표 순서 표에서 내 차례를 찾아 일주일 전, 3일 전, 하루 전, 당일에 알려 드립니다. 토큰은 이 컴퓨터에 암호화해 저장하고 이 캔버스를 읽는 데만 씁니다.</p>
+    <p class="guide">
+      <a id="guide" href="https://api.slack.com/apps">Slack 앱 설정</a>에서 앱의 <strong>User Token Scopes</strong>에
+      <code>canvases:read</code>를 넣고 설치한 뒤, <strong>User OAuth Token</strong>(xoxp-…)을 붙여 넣어 주세요.
+    </p>
+    <label for="token">토큰</label>
+    <input id="token" type="password" autocomplete="off" spellcheck="false" autocapitalize="off">
+    <label for="link">캔버스 링크</label>
+    <input id="link" type="url" autocomplete="off" spellcheck="false" placeholder="https://….slack.com/docs/T…/F…">
+    <label for="name">내 이름 (표에 적힌 그대로)</label>
+    <input id="name" type="text" autocomplete="off" spellcheck="false">
+    <p id="status" role="status" aria-live="polite"></p>
+    <div class="buttons">
+      <button type="button" id="cancel">닫기</button>
+      <button type="submit" id="ok" class="primary">확인</button>
+    </div>
+  </form>
+  <script src="slack-setup.js"></script>
+</body>
+</html>

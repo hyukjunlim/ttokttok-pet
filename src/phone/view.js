@@ -1,8 +1,8 @@
 'use strict';
 
-// What the phone shows: the sidebar's machine › folder tree (folder-tree.js), eTL's notices and the
-// weekly limits, cut down to what the page draws. Each session and notice says which app a tap
-// opens and at which page (`open`); the page turns that into a link for the phone it runs on
+// What the phone shows: the sidebar's machine › folder tree (folder-tree.js), eTL's and Slack's
+// notices and the weekly limits, cut down to what the page draws. Each session and notice says which
+// app a tap opens and at which page (`open`); the page turns that into a link for the phone it runs on
 // (src/phone/www/app.js). A Claude Code session with Remote Control on opens at itself in the
 // Claude app (https://claude.ai/code/<its Remote Control session>), one without at the Code tab.
 // Codex has no link to one thread on a phone, so a Codex thread opens the ChatGPT app's Codex
@@ -10,6 +10,7 @@
 
 const ETL_HOME = 'https://myetl.snu.ac.kr/';
 const ETL_LINK = /^https:\/\/myetl\.snu\.ac\.kr\//;
+const SLACK_LINK = /^https:\/\/[a-z0-9-]+\.(enterprise\.)?slack\.com\/docs\//;
 const CLAUDE_SESSION = /^https:\/\/claude\.ai\/code\/session_[A-Za-z0-9]{8,64}$/;
 const OWN_LINK = {
   claude: CLAUDE_SESSION,
@@ -32,6 +33,12 @@ const OPEN = {
   chatgpt: ['chatgpt', 'https://chatgpt.com/'],
   gemini: ['gemini', 'https://gemini.google.com/app'],
 };
+
+// An eTL notice opens in LearningX; a Slack reminder at its canvas in Slack, or nowhere without one.
+function noticeOpen(s) {
+  if (s.kind === 'slack') return { app: 'slack', url: SLACK_LINK.test(s.url || '') ? s.url : null };
+  return { app: 'learningx', url: ETL_LINK.test(s.url || '') ? s.url : ETL_HOME };
+}
 
 // `link`: the session's own address, if it has one (a web chat's, a Claude session's Remote Control).
 function openTarget(app, link = null) {
@@ -68,7 +75,8 @@ function folderOf(n, linkOf) {
   };
 }
 
-// `hosts`: buildTree's. `notices`: the eTL items (etl/feature.js). `usage`: usageView's.
+// `hosts`: buildTree's. `notices`: the eTL and Slack items (etl/feature.js, slack/feature.js).
+// `usage`: usageView's.
 // `linkOf(id)`: a session's own address: a web chat's, if a tab shows it, or a Claude session's
 // Remote Control session.
 function phoneView({ hosts = [], notices = [], usage = [], linkOf = () => null } = {}) {
@@ -89,7 +97,7 @@ function phoneView({ hosts = [], notices = [], usage = [], linkOf = () => null }
       badge: s.badge || '',
       title: s.title || '',
       project: s.project || '',
-      open: { app: 'learningx', url: ETL_LINK.test(s.url || '') ? s.url : ETL_HOME },
+      open: noticeOpen(s),
     })),
     usage: usage.map(({ app, name, percent, elapsed, resetsIn, age }) => ({ app, name, percent, elapsed, resetsIn, age })),
   };

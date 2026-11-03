@@ -26,6 +26,7 @@ const { raiseBrowserWindow, raiseCodexWindow, raiseVsCodeWindow, vsCodePlace } =
 const { archiveCodexChat, canDelete, deleteClaudeSession, isChat } = require('./chat-delete');
 const { watchWindowOrder } = require('./window-order');
 const { EtlFeature } = require('./etl/feature');
+const { SlackFeature } = require('./slack/feature');
 const { WebChatsFeature } = require('./webchats/feature');
 const { PhoneFeature } = require('./phone/feature');
 const { FolderWindow, displayChoices } = require('./folder-mode');
@@ -78,6 +79,7 @@ const CLI_SESSION_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f
 const APP_LINK = { claude: 'claude://hotkey', codex: 'codex://launch' };   // bring the app's window forward
 const ETL_LINK = /^https:\/\/myetl\.snu\.ac\.kr\//;   // the only pages an eTL bubble opens
 const WEB_LINK = /^https:\/\/(claude\.ai|chatgpt\.com|gemini\.google\.com)\//;   // and a web chat's
+const SLACK_LINK = /^https:\/\/[a-z0-9-]+\.(enterprise\.)?slack\.com\/docs\//;   // and a Slack reminder's canvas
 const FOREGROUND_HANDOFF_MS = 1500;
 const LOG_MAX_BYTES = 1024 * 1024;  // then the log starts over, keeping the last one as ttokttok-pet.old.log
 
@@ -89,6 +91,7 @@ let settings;
 let tracker;
 let codex = null;               // Codex threads, when Codex is installed and shown
 let etl = null;                 // SNU eTL notices, when turned on (see etl/feature.js)
+let slack = null;               // presentation reminders from a Slack canvas, when turned on (see slack/feature.js)
 let webchats = null;            // claude.ai and ChatGPT chats, when turned on (see webchats/feature.js)
 let phone = null;               // the sidebar on your phone, when turned on (see phone/feature.js)
 let win = null;
@@ -106,6 +109,7 @@ let sessions = [];              // Claude, Codex, eTL and web chats together, mo
 let claudeSessions = [];
 let codexSessions = [];
 let etlSessions = [];
+let slackSessions = [];
 let webSessions = [];
 let folder = null;              // folder mode's sidebar (see folder-mode.js)
 let stepKeys = null;            // Ctrl+Tab through the sidebar (see step-keys.js)
@@ -517,7 +521,7 @@ function sendSessions() {
   // Folder mode: the pet acts out the most urgent session, as the floating pet does, and eTL's
   // notices sit under the tree.
   folder?.send('folder:status', sessions[0]?.status || 'idle');
-  folder?.send('folder:notices', etlSessions);
+  folder?.send('folder:notices', [...etlSessions, ...slackSessions]);
   if (!win || win.isDestroyed()) return;
   // Getting started's practice bubble goes first, and shows even with the bubbles turned off.
   const practice = gettingStarted?.petItems() ?? [];
@@ -526,7 +530,7 @@ function sendSessions() {
 }
 
 function mergeSessions() {
-  sessions = [...claudeSessions, ...codexSessions, ...etlSessions, ...webSessions].filter((s) => !isDeleted(s.id)).sort(compareSessions);
+  sessions = [...claudeSessions, ...codexSessions, ...etlSessions, ...slackSessions, ...webSessions].filter((s) => !isDeleted(s.id)).sort(compareSessions);
   sendSessions();
   phone?.changed();
   phone?.observe(sessions, currentHidden());
@@ -950,6 +954,15 @@ function startEtl() {
   etl.start();
 }
 
+function startSlack() {
+  slack = new SlackFeature({ electron: { app, powerMonitor, safeStorage }, settings, log });
+  slack.on('change', (list) => {
+    slackSessions = list;
+    mergeSessions();
+  });
+  slack.start();
+}
+
 function startWebChats() {
   webchats = new WebChatsFeature({
     electron: { dialog, shell },
@@ -989,7 +1002,7 @@ function startPhone() {
     .catch((err) => log('phone:', err.message));
 }
 
-// What the phone page shows: the sidebar's tree, eTL's notices and the weekly limits. A Claude
+// What the phone page shows: the sidebar's tree, eTL's and Slack's notices and the weekly limits. A Claude
 // session opens at its Remote Control session: the one its running process is connected to, else
 // the one the desktop app connected it to last (an SSH session's process runs on the host).
 function phoneSnapshot() {
@@ -1001,7 +1014,7 @@ function phoneSnapshot() {
   }
   return {
     hosts: currentTree(),
-    notices: etlSessions,
+    notices: [...etlSessions, ...slackSessions],
     usage: settings.get('showUsage') ? currentUsage() : [],
     linkOf: (id) => links.get(id) ?? null,
   };
@@ -1036,6 +1049,7 @@ function appIcon(size) {
 
 function trackerFor(id) {
   if (String(id).startsWith('etl:')) return etl;
+  if (String(id).startsWith('slack:')) return slack;
   if (String(id).startsWith('web:')) return webchats;
   return String(id).startsWith('codex:') ? codex : tracker;
 }
@@ -1409,6 +1423,7 @@ function sessionUrl(s) {
   if (s?.kind === 'codex') return s.url || null;
   if (s?.kind === 'etl' && s.assistant) return etl?.assistantLinks().at(-1) || null;   // the eTL chat
   if (s?.kind === 'etl') return ETL_LINK.test(s.url || '') ? s.url : null;
+  if (s?.kind === 'slack') return SLACK_LINK.test(s.url || '') ? s.url : null;
   if (s?.kind === 'web') {
     const url = webchats?.target(s.id)?.url || '';
     return WEB_LINK.test(url) ? url : null;
@@ -1520,7 +1535,8 @@ function openSession(id, { handoff = true, fill = false } = {}) {
   // Opening a session doesn't settle it: Ready, Error and Needs you stay until you mark it done
   // (its ×, or the sidebar's Mark as done) or send it a message. A one-off eTL notice is done with
   // once opened; a class bubble (`keepOnOpen`, etl/timetable.js) stays until the class ends or its
-  // × is clicked.
+  // × is clicked. A Slack reminder stays until the next one takes over: it's about a day to come.
+  if (s.kind === 'slack' && s.badge === '순서 변경') trackerFor(s.id)?.dismiss(s.id);
   if (s.kind === 'etl' && s.status !== 'running' && s.status !== 'background' && s.status !== 'idle' && !s.keepOnOpen) {
     trackerFor(s.id)?.dismiss(s.id);
     persistDismissed();
@@ -1992,6 +2008,7 @@ function sourcesMenu() {
   if (localMod && liveUsageWanted()) items.push(liveUsageMenu());
   if (webchats) items.push(webchats.menu());
   if (etl) items.push(etl.menu());
+  if (slack) items.push(slack.menu());
   return items.length ? { label: 'Sources', submenu: items } : null;
 }
 
@@ -2341,6 +2358,7 @@ if (!app.requestSingleInstanceLock()) {
     tracker.start();
     startCodex();
     if (!DEMO) startEtl();
+    if (!DEMO) startSlack();
     if (!DEMO) startWebChats();
     if (!DEMO) startPhone();
     if (!DEMO) {
@@ -2410,6 +2428,7 @@ if (!app.requestSingleInstanceLock()) {
     tracker?.stop();
     codex?.stop();
     etl?.stop();
+    slack?.stop();
     webchats?.stop();
     phone?.stop();
     claudeUsage?.stop();

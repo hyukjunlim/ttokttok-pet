@@ -440,8 +440,9 @@ Hovering the sidebar's meter (in folder mode), or the tray menu (as a floating p
 figures in words, with how far into the week you are, the time until each reset, and how old the
 figures are once they're over an hour old. Tray menu → *Appearance* → *Show weekly limits* turns
 the meter off. The pet reads the figures from files; it contacts no server itself
-(apart from the SSH hosts above, and below, SNU eTL once you turn [that](#etl-snu) on, and the
-phones' push services once you turn on the phone companion).
+(apart from the SSH hosts above, and below, SNU eTL once you turn [that](#etl-snu) on, Slack's Web
+API once you turn on [Slack presentation reminders](#slack-presentation-reminders), and the phones'
+push services once you turn on the phone companion).
 
 - **Claude:** the pet's mod for Claude Code saves the figures after each reply of every session,
   with when the week resets ([Live Claude usage](#live-claude-usage)). The pet shows the newest,
@@ -478,8 +479,8 @@ watching and the phone only shows what the pet sends it, so the PC has to be on 
   menu → *Phone* → *Send a test notification* checks that they arrive. *Send a sample eTL notice*
   puts a 테스트 notice on the phone for 10 minutes, to try the way into LearningX. Getting
   started's *Phone* step does the same a part at a time, and says which part is missing.
-- **What it shows:** the sidebar's machine › folder tree with each session's status, eTL's notices
-  and the weekly limits. Machines and folders fold as they do in the sidebar. While the page is
+- **What it shows:** the sidebar's machine › folder tree with each session's status, eTL's and
+  Slack's notices and the weekly limits. Machines and folders fold as they do in the sidebar. While the page is
   open it asks the PC every 4 seconds; when the PC is asleep or the phone is off the tailnet, it
   keeps the last list and says *PC out of reach*.
 - **Tapping** opens the app. A Claude Code session with Remote Control on opens at itself in the
@@ -489,10 +490,12 @@ watching and the phone only shows what the pet sends it, so the PC has to be on 
   screen (`https://chatgpt.com/codex`), where you pick the PC and the thread, as Codex has no link
   to one thread on a phone. A web chat opens at its own conversation. An eTL notice opens in
   LearningX Student 2.0 on Android; on an iPhone it opens on the web, as eTL's site has no links
-  into the app. Where the app isn't installed, the page opens on the web. (On Android the link
-  names the app's package, and Android itself falls back to the web page.)
+  into the app. A Slack reminder opens its canvas in the Slack app. Where the app isn't installed,
+  the page opens on the web. (On Android the link names the app's package, and Android itself
+  falls back to the web page.)
 - **Notifications:** when a session turns *Ready*, *Needs you* or *Error*, and when a new eTL
-  bubble comes: 마감 임박, 마감 변경, 새 과제, 성적, 새 공지 (보강 공지, 휴강 공지) and 토큰 만료.
+  bubble comes: 마감 임박, 마감 변경, 새 과제, 성적, 새 공지 (보강 공지, 휴강 공지) and 토큰 만료;
+  and each Slack reminder (발표 D-7, D-3, D-1, 당일) and 순서 변경.
   *Running*, today's classes and sessions hidden from the sidebar don't notify, and neither does
   what's already showing when the companion starts. Tapping one opens a small page about it with
   one button into its app: the session in Claude or ChatGPT, the notice in LearningX. (A phone
@@ -657,6 +660,49 @@ lets the chat look up that course, including its materials.
 
 eTL's API can change; if checks start failing, tray menu → *Sources* → *eTL* shows the error.
 
+## Slack presentation reminders
+
+If your group keeps its presentation order in a Slack canvas, the pet can remind you of your turns.
+It's **off** until you turn it on, and while it's off the pet makes no request to Slack and creates
+no file for it.
+
+**Turning it on.** Tray menu → *Sources* → *Slack 발표* → *켜기*. A small window asks for three
+things:
+
+- a user token: at https://api.slack.com/apps, create an app in your workspace, add
+  `canvases:read` under *OAuth & Permissions* → *User Token Scopes*, install it, and copy the
+  *User OAuth Token* (`xoxp-…`);
+- the canvas link (in Slack, the canvas's *Copy link*: `https://<workspace>.slack.com/docs/T…/F…`);
+- your name as the table writes it.
+
+The pet reads the canvas before saving anything and lists the turns it found, so a name that
+doesn't match shows at once. *토큰·캔버스·이름 설정…* changes any of them.
+
+**The table.** It needs a 날짜 column (`YYYY-MM-DD`) and a 상태 column. 요일, 시간 and 세션 describe
+the slot, and every other column is a presenter column. A turn is a row whose 상태 is 정상 진행 with
+your name in a presenter column. A note beside the name, like "(리허설)", is fine. A name struck
+through (`~~이름~~`) doesn't count, so a slot that's done or cancelled gets no reminder.
+
+**Bubbles.** The pet reads the canvas when it starts, every 30 minutes, when the PC wakes from
+sleep, and on *지금 확인*. For each turn to come:
+
+- **발표 D-7**, **발표 D-3** and **발표 D-1** appear at 09:00 on those days, and **발표 당일** at
+  08:00 on the day. Each one stays until the next takes over, and the day's until the presentation
+  ends. They're made from the last schedule read, so a check that fails doesn't lose one. Its ×
+  hides only that one.
+- **순서 변경** appears when one of your turns to come is added, removed or moved to another column.
+  It stays for 3 days.
+- **토큰 확인** appears when Slack stops accepting the token. The pet then stops asking until you set
+  it up again.
+- **표 확인 필요** appears when the table loses its 날짜 or 상태 column. Reminders continue from the
+  last schedule read.
+
+Clicking a bubble opens the canvas in Slack.
+
+**Security.** The token is encrypted with `safeStorage`, like eTL's, and never appears in the log
+or the bubbles. The pet calls one Slack method, `canvases.getContent`, on the one canvas you
+registered. It never posts, reacts or edits anything in Slack.
+
 ## Pets
 
 A pet is a folder containing `pet.json` and a sprite sheet, the same format as ChatGPT/Codex pets:
@@ -763,6 +809,7 @@ src/usage.js        Weekly limits: Claude's figures (the mod's, the app's), Code
 src/pets.js         Pet discovery and validation (Codex format)
 src/demo.js         Fake sessions for `npm run demo`
 src/etl/            SNU eTL: API client, notices, timetable, token store, query bridge, chat folder
+src/slack/          Slack presentation reminders: canvas client, table rules, tracker, setup window
 src/webchats/       Web chats: the extension's native host, its registration, tab reports → bubbles
 src/phone/          The phone companion: its web server, Web Push, what the phone shows and what notifies, the page (www/)
 tools/make_clay.py  Generates Clay, the built-in pet

@@ -24,7 +24,8 @@ function normalizeToken(token) {
   return value;
 }
 
-function createTokenStore({ safeStorage, file }) {
+// `normalize`: checks a token before it's saved (the Slack feature brings its own).
+function createTokenStore({ safeStorage, file, normalize = normalizeToken }) {
   if (!safeStorage || !file) throw new TypeError('createTokenStore needs safeStorage and file');
 
   // Whether a saved token exists. It may still fail to decrypt (load() then gives null).
@@ -56,7 +57,7 @@ function createTokenStore({ safeStorage, file }) {
   }
 
   function save(token) {
-    const value = normalizeToken(token);
+    const value = normalize(token);
     if (!safeStorage.isEncryptionAvailable()) {
       throw new Error('이 컴퓨터에서는 토큰을 안전하게 암호화할 수 없어 저장하지 않았습니다.');
     }

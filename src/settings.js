@@ -34,6 +34,9 @@ const DEFAULTS = {
   etlAssistantBubble: false, // keep an "eTL 비서" bubble that opens the eTL chat
   etlAssistantAsked: false,  // asked once, when the first token was saved
   etlTimetableBubble: true,  // a bubble for each of the day's classes (while eTL is on)
+  slackEnabled: false,     // remind of your presentation turns from a Slack canvas (needs a token)
+  slackCanvasUrl: null,    // ... that canvas's link (https://<workspace>.slack.com/docs/T…/F…)
+  slackName: null,         // ... and your name as the canvas's table writes it
   webChats: false,         // claude.ai and ChatGPT chats, from the browser extension
   phone: false,            // the sidebar on your phone, with notifications (phone/feature.js)
   phonePort: null,         // ... the local port it serves on; null: 47823

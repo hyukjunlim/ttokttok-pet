@@ -1,0 +1,10 @@
+/* The Slack setup window: etl-token.css, plus room for the list of turns it found. */
+
+#status {
+  white-space: pre-line;
+}
+
+code {
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+}

@@ -93,6 +93,37 @@ test('eTL: new notices, assignments, grades, deadline changes and 마감 임박 
   assert.equal(events.length, 0, 'each notice once');
 });
 
+test('Slack: each presentation reminder and 순서 변경 buzz once; token and table trouble don\'t', () => {
+  let { memory } = pushEvents(null, [], 0);
+  let events;
+  const d7 = { id: 'slack:remind:2026-11-10:짧은 발표 2:d7', kind: 'slack', status: 'review', badge: '발표 D-7', title: '11/10(화) 짧은 발표 2', project: '10:00-11:00 · 발표 순서' };
+  ({ memory, events } = pushEvents(memory, [
+    d7,
+    { id: 'slack:change:2026-12-22:긴 발표:5', kind: 'slack', status: 'waiting', badge: '순서 변경', title: '12/22(화) 긴 발표', project: '빠짐' },
+    { id: 'slack:token', kind: 'slack', status: 'waiting', badge: '토큰 확인', title: 'token' },
+    { id: 'slack:format', kind: 'slack', status: 'failed', badge: '표 확인 필요', title: 'table' },
+  ], 1));
+  assert.deepEqual(events.map((e) => [e.title, e.body]), [
+    ['발표 D-7 · 11/10(화) 짧은 발표 2', '10:00-11:00 · 발표 순서'],
+    ['순서 변경 · 12/22(화) 긴 발표', '빠짐'],
+  ]);
+  ({ memory, events } = pushEvents(memory, [d7], 2));
+  assert.equal(events.length, 0, 'each reminder once');
+  ({ events } = pushEvents(memory, [{ ...d7, id: d7.id.replace(':d7', ':d3'), badge: '발표 D-3' }], 3));
+  assert.deepEqual(events.map((e) => e.title), ['발표 D-3 · 11/10(화) 짧은 발표 2'], 'the next reminder buzzes again');
+});
+
+test('a Slack notice opens its canvas in Slack, and nothing outside a workspace', () => {
+  const canvas = 'https://team.slack.com/docs/T01EXAMPLE0/F01EXAMPLE0';
+  const view = phoneView({
+    notices: [
+      { id: 'slack:remind:a:d7', kind: 'slack', status: 'review', badge: '발표 D-7', title: 'a', url: canvas },
+      { id: 'slack:remind:b:d7', kind: 'slack', status: 'review', badge: '발표 D-7', title: 'b', url: 'https://evil.example/docs/x' },
+    ],
+  });
+  assert.deepEqual(view.notices.map((n) => n.open), [{ app: 'slack', url: canvas }, { app: 'slack', url: null }]);
+});
+
 // ---------------------------------------------------------------- what the phone shows
 
 test('a tap opens the app: Claude Code at its Remote Control session, Codex in ChatGPT, a web chat at its conversation', () => {

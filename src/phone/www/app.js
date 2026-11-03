@@ -2,8 +2,8 @@
 
 // The phone page: what the pet's sidebar shows (src/renderer/folder.js), from the pet on the PC
 // (src/phone/server.js). Machines and folders fold as they do there; a tap on a session opens its
-// app, Claude or ChatGPT (or Gemini for a Gemini chat), and an eTL notice opens in LearningX, by the
-// link links.js makes.
+// app, Claude or ChatGPT (or Gemini for a Gemini chat), an eTL notice opens in LearningX and a Slack
+// reminder in Slack, by the link links.js makes.
 
 (() => {
   const LABELS = { waiting: 'Needs you', failed: 'Error', review: 'Ready', running: 'Running', background: 'Background' };
@@ -332,7 +332,7 @@
     box.replaceChildren(...state.notices.map((s) => {
       const row = linkRow(`row session notice status-${s.status}`, s.open);
       row.dataset.id = s.id;
-      row.setAttribute('aria-label', [s.badge, s.title, s.project, 'Opens LearningX'].filter(Boolean).join(', '));
+      row.setAttribute('aria-label', [s.badge, s.title, s.project, `Opens ${appName(s.open?.app) || 'the app'}`].filter(Boolean).join(', '));
       const text = el('span', 'text');
       text.append(el('span', 'name', s.title));
       if (s.project) text.append(el('span', 'sub', s.project));

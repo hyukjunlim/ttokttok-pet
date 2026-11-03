@@ -33,8 +33,10 @@ Hard constraints for Ttokttok Pet. Change them only with the owner's approval.
   same page opens on the web.
 
 ## Network
-- No server contact of its own, except SSH hosts from `~/.ssh/config` with key auth and SNU eTL
-  once the user turns it on. On SSH hosts the pet runs read-only Python watchers, plus one
+- No server contact of its own, except SSH hosts from `~/.ssh/config` with key auth, SNU eTL
+  once the user turns it on, and Slack's Web API (`slack.com/api`) once the user turns it on,
+  with a user token the user registers (scope `canvases:read` only), reading only the canvas the
+  user registers. On SSH hosts the pet runs read-only Python watchers, plus one
   command per Delete the user confirms in the sidebar (remove that Claude Code session's files,
   or archive that Codex chat through Codex's app-server).
 - The phone companion, only once the user turns it on: a web server bound to 127.0.0.1, reached
@@ -64,11 +66,19 @@ Hard constraints for Ttokttok Pet. Change them only with the owner's approval.
 - Shows what the sidebar shows: the host › folder tree with each session's status, eTL's notices
   and the weekly limits. It never chats.
 - Pushes when a session turns Ready, Needs you or Error, and when a new eTL bubble appears
-  (마감 임박, 마감 변경, 새 과제, 성적, 새 공지, 토큰 만료). Running and today's classes don't push.
+  (마감 임박, 마감 변경, 새 과제, 성적, 새 공지, 토큰 만료), and when a presentation reminder from
+  Slack appears (발표 D-7, D-3, D-1, 당일, 순서 변경). Running and today's classes don't push.
 - An eTL notice opens in the LearningX Student app where the phone allows it, otherwise on the web.
 - Works only while the PC is on and awake; the phone never checks eTL or reads sessions itself.
 - Out of scope: replying from the phone, the animated pet on the phone, any server run by the
   project.
+
+## Slack presentation schedule
+- Off until the user turns it on and registers a user token, a canvas link and their name.
+- Read-only: it never posts, reacts, or edits anything in Slack.
+- A turn is a row of the canvas's table whose 상태 is 정상 진행 and that has the user's name, not
+  struck through, in a presenter column.
+- Reminds at D-7, D-3, D-1 and on the day; works only while the PC is on and awake.
 
 ## Release
 - A `v<version>` tag matches the version in `package.json`.
