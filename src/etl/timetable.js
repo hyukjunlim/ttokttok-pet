@@ -363,9 +363,10 @@ function inMinutes(ms) {
 }
 
 // Today's bubbles, one per class, in start order: each from SHOW_FROM_HOUR until its class ends.
-// The class under way, or else the next one, stands out ('review'); the rest stay quiet ('idle',
-// after other bubbles, and the pet keeps idling for them). They carry no `since`, so no "5m"
-// shows and they keep this order among themselves. `dismissed` holds ids closed with ×.
+// The class under way, or else the next one, stands out ('review'), with any starting at the same
+// time; the rest stay quiet ('idle', after other bubbles, and the pet keeps idling for them). They
+// carry no `since`, so no "5m" shows and they keep this order among themselves. `dismissed` holds
+// ids closed with ×.
 function timetableItems(today, nowMs, dismissed = []) {
   const { date, classes, cancelled } = today;
   const { hour, date: nowDate } = kstParts(nowMs);
@@ -382,7 +383,7 @@ function timetableItems(today, nowMs, dismissed = []) {
       c,
       badge: c.kind === '정규' ? c.start : `${c.kind} ${c.start}`,
       project: [...where(c), when, ...(c.note ? [c.note] : [])].join(' · '),
-      status: c === focus ? 'review' : 'idle',
+      status: c.start === focus.start ? 'review' : 'idle',
     });
   }
   for (const c of cancelled.filter(left)) {
@@ -401,6 +402,7 @@ function timetableItems(today, nowMs, dismissed = []) {
       detail: clip(`${c.start}~${c.end} ${c.course}${c.room ? ` · ${c.room}` : ''}${c.note ? ` · ${c.note}` : ''}`, 300),
       url: c.course_id ? `${ETL_URL}courses/${c.course_id}` : ETL_URL,
       keepOnOpen: true,              // clicking opens the course; only × closes it (main.js)
+      startsAt: atKst(date, c.start),   // in one timeline with TodoMate's schedule (timeline.js)
       expiresAt: atKst(date, c.end),
     }))
     .filter((it) => !dismissed.includes(it.id));

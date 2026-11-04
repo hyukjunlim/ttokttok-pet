@@ -182,7 +182,8 @@
     const detail = document.createElement('span');
     detail.className = 'detail';
     const ago = formatAgo(s.since);
-    detail.append(span('what', [source, s.project].filter(Boolean).join(' · ')));
+    // Today's classes and TodoMate schedule read as one timeline (timeline.js), without the app.
+    detail.append(span('what', [s.startsAt == null && source, s.project].filter(Boolean).join(' · ')));
     if (ago) detail.append(span('ago', `· ${ago}`));
     text.append(line, detail);
     el.append(text);

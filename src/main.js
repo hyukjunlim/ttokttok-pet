@@ -15,6 +15,7 @@ const { discoverPets, petRoots } = require('./pets');
 const { SessionTracker, defaultPaths, liveBridges } = require('./sessions');
 const { CodexTracker, codexPaths } = require('./codex');
 const { compareSessions } = require('./transcript');
+const { timeline } = require('./timeline');
 const { combineClaudeUsage, usageView } = require('./usage');
 const { ClaudeUsage } = require('./claude-usage');
 const { LocalMod, bundledVersion, modFiles, runningWslDistros, sshInstaller, wslInstaller } = require('./claude-mod');
@@ -524,7 +525,7 @@ function sendSessions() {
   // Folder mode: the pet acts out the most urgent session, as the floating pet does, and eTL's
   // notices sit under the tree.
   folder?.send('folder:status', sessions[0]?.status || 'idle');
-  folder?.send('folder:notices', [...etlSessions, ...slackSessions, ...todomateSessions]);
+  folder?.send('folder:notices', currentNotices());
   if (!win || win.isDestroyed()) return;
   // Getting started's practice bubble goes first, and shows even with the bubbles turned off.
   const practice = gettingStarted?.petItems() ?? [];
@@ -532,8 +533,13 @@ function sendSessions() {
   if (tray) tray.setToolTip(trayTooltip());
 }
 
+// eTL's, Slack's and TodoMate's bubbles, today's classes and schedule in one timeline.
+function currentNotices() {
+  return timeline([...etlSessions, ...slackSessions, ...todomateSessions]);
+}
+
 function mergeSessions() {
-  sessions = [...claudeSessions, ...codexSessions, ...etlSessions, ...slackSessions, ...todomateSessions, ...webSessions].filter((s) => !isDeleted(s.id)).sort(compareSessions);
+  sessions = timeline([...claudeSessions, ...codexSessions, ...etlSessions, ...slackSessions, ...todomateSessions, ...webSessions]).filter((s) => !isDeleted(s.id)).sort(compareSessions);
   sendSessions();
   phone?.changed();
   phone?.observe(sessions, currentHidden());
@@ -1037,7 +1043,7 @@ function phoneSnapshot() {
   }
   return {
     hosts: currentTree(),
-    notices: [...etlSessions, ...slackSessions, ...todomateSessions],
+    notices: currentNotices(),
     usage: settings.get('showUsage') ? currentUsage() : [],
     linkOf: (id) => links.get(id) ?? null,
   };

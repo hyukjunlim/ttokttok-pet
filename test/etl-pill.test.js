@@ -104,6 +104,16 @@ test('an eTL notice is marked as coming from eTL', () => {
   assert.equal(find(bubble, 'what').textContent, 'eTL');
 });
 
+test("today's classes and TodoMate schedule don't say which app they come from", () => {
+  const at = Date.parse('2026-11-03T13:00:00+09:00');
+  const [cls, todo] = page()([
+    { id: 'etl:timetable:c', kind: 'etl', status: 'review', badge: '13:00', title: '가상현실공학', project: '000-101 · 30분 후', startsAt: at },
+    { id: 'todomate:2026-11-03:b', kind: 'todomate', status: 'idle', badge: '13:00', title: '랩미팅', project: '30분 후', startsAt: at },
+  ]);
+  assert.equal(find(cls, 'what').textContent, '000-101 · 30분 후');
+  assert.equal(find(todo, 'what').textContent, '30분 후');
+});
+
 test('an eTL notice shows its badge where a session shows its status', () => {
   const [bubble] = page()([NOTICE]);
   assert.equal(find(bubble, 'label').textContent, '마감 임박');

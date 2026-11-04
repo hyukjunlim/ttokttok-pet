@@ -124,8 +124,8 @@ function inMinutes(ms) {
 }
 
 // Today's bubbles, one per item, from SHOW_FROM_HOUR until each ends. The one under way, or else
-// the next, stands out ('review'); the rest stay quiet ('idle'), as eTL's classes do. `dismissed`
-// holds ids closed with ×.
+// the next, stands out ('review') with any starting at the same time; the rest stay quiet ('idle'),
+// as eTL's classes do. `dismissed` holds ids closed with ×.
 function scheduleItems({ date, items }, nowMs, dismissed = []) {
   const { hour, date: nowDate } = kstParts(nowMs);
   if (nowDate !== date || hour < SHOW_FROM_HOUR) return [];
@@ -138,12 +138,13 @@ function scheduleItems({ date, items }, nowMs, dismissed = []) {
       return {
         id: `todomate:${date}:${it.id ?? `${it.start}:${squash(it.title)}`}`,
         kind: 'todomate',
-        status: it === focus ? 'review' : 'idle',
+        status: it.start === focus.start ? 'review' : 'idle',
         badge: it.start,
         title: clip(it.title, TITLE_LIMIT),
         project: clip(when, PROJECT_LIMIT),
         detail: clip(`${it.start}~${it.end} ${it.title}`, 300),
         keepOnOpen: true,            // a click does nothing; only × closes it (main.js)
+        startsAt: startMs,           // in one timeline with eTL's classes (timeline.js)
         expiresAt: atKst(date, it.end),
       };
     })

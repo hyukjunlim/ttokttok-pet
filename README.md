@@ -592,9 +592,10 @@ After that, a bubble appears for:
 - **마감 변경**, **새 과제**, **성적** (a new or changed grade) and **새 공지** (announcements of the
   last 14 days; one that mentions a makeup or cancelled class says **보강 공지** or **휴강 공지**).
 - **Today's classes:** from 6:00, one bubble per class (start time, course, room and how soon it
-  starts, kept current), each until that class ends. The class under way or next stands out; 보강
-  and 휴강 get their own badge. Clicking one opens the course; × hides it until the pet restarts or
-  the day ends; tray menu → *Sources* → *eTL* → *오늘 수업 알림* turns them off.
+  starts, kept current), each until that class ends. With TodoMate's schedule they make one list in
+  start order, a class first at the same time, and those under way or next, starting earliest,
+  stand out; 보강 and 휴강 get their own badge. Clicking one opens the course; × hides it until the
+  pet restarts or the day ends; tray menu → *Sources* → *eTL* → *오늘 수업 알림* turns them off.
 - **토큰 만료:** once, when eTL stops accepting the token.
 
 Clicking a bubble opens that eTL page in your browser; × dismisses the others for good. Other
@@ -738,8 +739,9 @@ and on *지금 확인*.
 
 - **Today's schedule:** items of the *Schedule* category that start with a time, like
   `13:00 팀 미팅` or `11:30-12:30 세미나 (101-201)`, show from 06:00 until each ends (an item with
-  only a start time counts as an hour), checked or not. The one under way, or else the next, stands
-  out. A click does nothing; its × hides it.
+  only a start time counts as an hour), checked or not. They share one list with today's classes,
+  in start order; those under way or next, starting earliest, stand out. A click does nothing; its
+  × hides it.
 - **D-Day:** items of the *D-Day* category that start with a date, like `11/6 저널클럽 발표`, show
   every morning from 06:00 as `D-3 11/6(금) 저널클럽 발표` until that day ends. The pet looks for
   them on today and the 29 days before, since an item stays on the day it was written. Clicking
