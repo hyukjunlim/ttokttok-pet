@@ -1,8 +1,9 @@
 'use strict';
 
 // Getting started: a window that walks a new user through the setup, a step at a time (the mode,
-// Claude's live usage, SNU eTL, the web chats extension, the phone), then has them try the pet itself on
-// practice items: a bubble next to the floating pet, or two sessions at the top of the sidebar.
+// Claude's live usage, SNU eTL, TodoMate, Slack, the web chats extension, the phone), then has them
+// try the pet itself on practice items: a bubble next to the floating pet, or two sessions at the
+// top of the sidebar.
 // It opens on the first start, and from the tray menu. The steps act through main.js (`actions`);
 // the page (renderer/onboarding.*) gets what it shows from `state()`.
 
@@ -17,7 +18,7 @@ const TRIES = {
   folder: ['click', 'step', 'rowMenu', 'hide', 'menu'],
 };
 const ACTIONS = new Set([
-  'mode', 'usage', 'etl', 'web', 'extensionFolder', 'phone', 'phoneCheck', 'phoneServe', 'phoneCode', 'phoneOpen',
+  'mode', 'usage', 'etl', 'todomate', 'slack', 'web', 'extensionFolder', 'phone', 'phoneCheck', 'phoneServe', 'phoneCode', 'phoneOpen',
   'copy', 'doc', 'practice', 'refresh', 'close',
 ]);
 const MAX_COPY = 500;
@@ -26,8 +27,9 @@ const MAX_COPY = 500;
 const TAILSCALE_LINK = /^https:\/\/(login\.)?tailscale\.com\/[^\s]*$/;
 
 class GettingStarted {
-  // state(): what the page shows (see main.js). actions: { mode(m), usage(keys), etl(), web(on),
-  // extensionFolder(), phone(on), phoneCheck(), phoneServe(), phoneCode(), phoneOpen(url), doc(name) },
+  // state(): what the page shows (see main.js). actions: { mode(m), usage(keys), etl(), todomate(),
+  // slack(), web(on), extensionFolder(), phone(on), phoneCheck(), phoneServe(), phoneCode(),
+  // phoneOpen(url), doc(name) },
   // each may return a promise; changed(): the practice items came
   // or went, so the pet and the sidebar draw again; closed(): the window was closed.
   constructor({ state, actions, changed, closed = () => {}, log = () => {} }) {
@@ -186,6 +188,12 @@ class GettingStarted {
         return;
       case 'etl':
         run(this.actions.etl());
+        return;
+      case 'todomate':
+        run(this.actions.todomate());
+        return;
+      case 'slack':
+        run(this.actions.slack());
         return;
       case 'web':
         run(this.actions.web(arg === true));

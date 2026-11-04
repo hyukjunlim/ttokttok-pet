@@ -19,6 +19,8 @@
     { key: 'mode', name: 'Mode' },
     { key: 'usage', name: 'Claude usage', skippable: true },
     { key: 'etl', name: 'SNU eTL', skippable: true, when: (s) => s.etl.available },
+    { key: 'todomate', name: 'TodoMate', skippable: true, when: (s) => s.todomate?.available },
+    { key: 'slack', name: 'Slack', skippable: true, when: (s) => s.slack?.available },
     { key: 'web', name: 'Web chats', skippable: true, when: (s) => s.web.available },
     { key: 'phone', name: 'Phone', skippable: true, when: (s) => s.phone?.available },
     { key: 'try', name: 'Try it', skippable: true },
@@ -79,6 +81,8 @@
     if (key === 'mode') return modeChosen ? 'done' : 'todo';
     if (key === 'usage' && state.usage.places.some((p) => p.set)) return 'done';
     if (key === 'etl' && state.etl.enabled) return 'done';
+    if (key === 'todomate' && state.todomate.enabled) return 'done';
+    if (key === 'slack' && state.slack.enabled) return 'done';
     if (key === 'web' && state.web.on && state.web.connected > 0) return 'done';
     if (key === 'phone' && state.phone.on && state.phone.paired > 0) return 'done';
     if (key === 'try' && practiced.has(state.mode)) return 'done';
@@ -101,7 +105,7 @@
       }, h('span.tick'), scene, h('strong', { text: title }), h('span.what', { text: what }));
       return [
         h('h1', { id: 'step-title', text: 'How should the pet sit on your screen?' }),
-        h('p.lead', { text: "Ttokttok Pet keeps track of what's waiting for you: Claude Code sessions, Codex threads, web chats and SNU eTL. Set up what you use, then try it out." }),
+        h('p.lead', { text: "Ttokttok Pet keeps track of what's waiting for you: Claude Code sessions, Codex threads, web chats, SNU eTL, TodoMate and Slack. Set up what you use, then try it out." }),
         h('div.cards', { role: 'radiogroup', 'aria-label': 'Mode' },
           card('pet', 'Floating pet', 'A small pet above your windows, with a bubble for each session that needs you, is working or is done.',
             h('div.scene.pet-mode', { 'aria-hidden': 'true' }, h('div.win'), h('div.mini-pill.one'), h('div.mini-pill.two'), petEl())),
@@ -159,6 +163,32 @@
           : h('p', null, h('button.btn.primary.small', { type: 'button', onclick: () => api.act('etl') }, 'Connect eTL…'),
             h('span.note', { text: ' Opens the token window (eTL 토큰 등록).' })),
         h('p.note.gap', null, 'Not at SNU? Skip this. Later: tray menu → ', h('em', { text: 'Sources' }), ' → ', h('em', { text: 'eTL' }), '.'),
+      ];
+    },
+
+    todomate() {
+      return [
+        h('h1', { id: 'step-title' }, 'TodoMate ', h('span.note', { text: '(optional)' })),
+        h('p.lead', { text: "If you keep your day in TodoMate, the pet shows today's timed items (like “13:00 팀 미팅” in the Schedule category) next to your classes, and counts down to the dates in D-Day." }),
+        h('p', { text: 'It reads TodoMate through Kakao PlayMCP and never changes a todo. First add 투두메이트 to your PlayMCP toolbox; the button then opens the toolbox and asks for its connection prompt.' }),
+        state.todomate.enabled
+          ? h('div.status.ok', null, h('span.dot'), "Connected. Today's schedule shows as bubbles.")
+          : h('p', null, h('button.btn.primary.small', { type: 'button', onclick: () => api.act('todomate') }, 'Connect TodoMate…'),
+            h('span.note', { text: ' Opens the PlayMCP toolbox in the browser.' })),
+        h('p.note.gap', null, "Don't use TodoMate? Skip this. Later: tray menu → ", h('em', { text: 'Sources' }), ' → ', h('em', { text: '투두메이트 일정' }), '.'),
+      ];
+    },
+
+    slack() {
+      return [
+        h('h1', { id: 'step-title' }, 'Slack presentations ', h('span.note', { text: '(optional)' })),
+        h('p.lead', { text: 'If your lab or class keeps its presentation schedule in a Slack canvas, the pet counts down to each of your turns every morning, from D-7 down to D-Day.' }),
+        h('p', { text: "It needs a Slack user token (from a small app you make with the canvases:read scope), the canvas's link and your name as the canvas writes it. The pet keeps the token encrypted on this PC and only reads that canvas." }),
+        state.slack.enabled
+          ? h('div.status.ok', null, h('span.dot'), 'Set up. Your turns show as bubbles.')
+          : h('p', null, h('button.btn.primary.small', { type: 'button', onclick: () => api.act('slack') }, 'Set up Slack…'),
+            h('span.note', { text: ' Opens the setup window (Slack 발표).' })),
+        h('p.note.gap', null, 'No such canvas? Skip this. Later: tray menu → ', h('em', { text: 'Sources' }), ' → ', h('em', { text: 'Slack 발표' }), '.'),
       ];
     },
 
@@ -312,6 +342,8 @@
           line(true, state.mode === 'pet' ? 'Floating pet' : 'Folder sidebar'),
           line(s('usage'), s('usage') ? 'Claude’s weekly limits' : 'Claude’s weekly limits: skipped'),
           state.etl.available && line(s('etl'), s('etl') ? 'SNU eTL' : 'SNU eTL: skipped'),
+          state.todomate?.available && line(s('todomate'), s('todomate') ? 'TodoMate' : 'TodoMate: skipped'),
+          state.slack?.available && line(s('slack'), s('slack') ? 'Slack presentations' : 'Slack presentations: skipped'),
           state.web.available && line(s('web'), s('web') ? 'Web chats' : 'Web chats: skipped'),
           state.phone?.available && line(s('phone'), s('phone') ? 'Phone' : 'Phone: skipped')),
         h('p.note', null, 'Bring this back any time: tray menu → ', h('em', { text: 'Getting started…' })),

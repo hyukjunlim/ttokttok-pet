@@ -43,8 +43,9 @@ npm start
 
 On its first start, the pet opens **Getting started**, which sets it up a step at a time: the mode
 (a floating pet or a sidebar), the small mod for Claude Code that Claude's weekly limit comes from
-([Live Claude usage](#live-claude-usage)), SNU eTL, the browser extension for chats on
-claude.ai, ChatGPT and Gemini ([Web chats](#web-chats-claudeai-chatgpt-gemini)), and the phone
+([Live Claude usage](#live-claude-usage)), SNU eTL, TodoMate ([TodoMate schedule](#todomate-schedule)),
+Slack ([Slack presentation reminders](#slack-presentation-reminders)), the browser extension for
+chats on claude.ai, ChatGPT and Gemini ([Web chats](#web-chats-claudeai-chatgpt-gemini)), and the phone
 ([Phone](#phone)). Each step can be skipped. Then you try the pet out on practice items (a bubble next to the floating pet, or two
 sessions at the top of the sidebar): click, mark done, hide and show with `Ctrl+Alt+P`, step
 through with `Ctrl+Tab`, right-click. Tray menu → *Getting started…* (or `--getting-started`)
@@ -672,8 +673,8 @@ If your group keeps its presentation order in a Slack canvas, the pet can remind
 It's **off** until you turn it on, and while it's off the pet makes no request to Slack and creates
 no file for it.
 
-**Turning it on.** Tray menu → *Sources* → *Slack 발표* → *켜기*. A small window asks for three
-things:
+**Turning it on.** In Getting started's *Slack* step, choose *Set up Slack…*, or use tray menu →
+*Sources* → *Slack 발표* → *켜기*. A small window asks for three things:
 
 - a user token: at https://api.slack.com/apps, create an app in your workspace, add
   `canvases:read` under *OAuth & Permissions* → *User Token Scopes*, install it, and copy the
@@ -724,7 +725,8 @@ adds, checks, edits or deletes a todo.
 
 1. On [playmcp.kakao.com](https://playmcp.kakao.com/toolbox), sign in with Kakao and add
    **투두메이트** to your toolbox (it asks you to link your TodoMate account).
-2. Tray menu → *Sources* → *투두메이트 일정* → *켜기*. The pet opens your toolbox in the browser.
+2. In Getting started's *TodoMate* step, choose *Connect TodoMate…*, or use tray menu → *Sources* →
+   *투두메이트 일정* → *켜기*. The pet opens your toolbox in the browser.
 3. There, click **OpenClaw와 연결**, agree, and click **연결 프롬프트 생성**. Copy the prompt, then click
    *클립보드로 연결* in the pet's dialog. The prompt works for 10 minutes; the pet takes only the
    one-time token in it.

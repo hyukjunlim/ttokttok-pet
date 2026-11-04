@@ -818,6 +818,8 @@ function startGettingStarted() {
       },
       usage: setUpUsage,
       etl: () => etl?.setEnabled(true, { openChat: false }),
+      todomate: () => todomate?.setEnabled(true),
+      slack: () => slack?.setEnabled(true),
       web: (on) => webchats?.setEnabled(on, { quiet: true }),
       extensionFolder: () => webchats?.openExtensionFolder(),
       phone: (on) => phone?.setEnabled(on, { quiet: true }).then(() => on && phone.checkSetup()),
@@ -836,6 +838,8 @@ function gettingStartedState() {
     pet: currentPet ? { url: sheetUrl(currentPet), pixelArt: currentPet.pixelArt === true } : null,
     usage: { places: usagePlaces(), busy: modBusy, errors: usageSetupErrors },
     etl: { available: Boolean(etl), enabled: Boolean(etl?.enabled) },
+    todomate: { available: Boolean(todomate), enabled: Boolean(todomate?.enabled) },
+    slack: { available: Boolean(slack), enabled: Boolean(slack?.enabled) },
     web: {
       available: Boolean(webchats),
       on: Boolean(webchats?.enabled),
