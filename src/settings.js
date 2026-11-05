@@ -44,6 +44,8 @@ const DEFAULTS = {
   webChats: false,         // claude.ai and ChatGPT chats, from the browser extension
   phone: false,            // the sidebar on your phone, with notifications (phone/feature.js)
   phonePort: null,         // ... the local port it serves on; null: 47823
+  phoneSessionPush: { review: true, waiting: true, failed: true },  // ... which session statuses notify (Ready, Needs you, Error)
+  phoneNoticePush: { etl: true, slack: true, todomate: true },      // ... and which notices (phone/notify.js)
   shortcut: 'CommandOrControl+Alt+P',
   dismissed: {},
   readyFrom: null,         // when opening a session stopped counting as done with it (main.js)

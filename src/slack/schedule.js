@@ -27,8 +27,8 @@ const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 const PROJECT_LIMIT = 80;
 
 // Each turn still to come gets one reminder a day, from SHOW_AT until the next morning's (the day's
-// until the presentation ends): D-12, …, D-1, D-Day. The milestone days stand out and are the ones
-// the phone pushes (their ids are slack:remind:…; the other days' are slack:daily:…).
+// until the presentation ends): D-12, …, D-1, D-Day. The milestone days stand out (their ids are
+// slack:remind:…; the other days' are slack:daily:…); the phone pushes each day's (phone/notify.js).
 const SHOW_AT = '06:00';
 const MILESTONES = { 7: 'review', 3: 'review', 1: 'waiting', 0: 'waiting' };
 const dLabel = (n) => (n === 0 ? 'D-Day' : `D-${n}`);

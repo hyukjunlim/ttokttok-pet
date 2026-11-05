@@ -19,7 +19,7 @@ const { EventEmitter } = require('node:events');
 const { execFile } = require('node:child_process');
 const { createPhoneServer } = require('./server');
 const { phoneView, opensOf, openOfKind } = require('./view');
-const { pushEvents } = require('./notify');
+const { pushEvents, LABELS, NOTICE_SOURCES } = require('./notify');
 const { Pusher, generateVapidKeys, validSubscription } = require('./webpush');
 
 const DEFAULT_PORT = 47823;
@@ -27,6 +27,7 @@ const CODE_TTL_MS = 10 * 60_000;
 const CODE_TRIES = 5;
 const MAX_DEVICES = 8;
 const REBUILD_MS = 250;
+const CLOCK_MS = 60_000;          // the list is looked at again this often, for what buzzes by the clock
 const SAMPLE_MS = 10 * 60_000;    // how long a sample eTL notice stays on the phone
 const MAX_LINK = 1000;            // a longer address stays out of a notification, which has 4 KB
 const SUBJECT = 'https://github.com/hyukjunlim/ttokttok-pet';
@@ -96,6 +97,9 @@ class PhoneFeature extends EventEmitter {
   }
 
   stop() {
+    clearInterval(this.clock);
+    this.clock = null;
+    this.last = null;
     clearTimeout(this.rebuildTimer);
     this.rebuildTimer = null;
     clearTimeout(this.sampleTimer);
@@ -193,11 +197,22 @@ class PhoneFeature extends EventEmitter {
   }
 
   // main.js's merged list of sessions: notifications for what turned Ready, Needs you or Error,
-  // and for new eTL bubbles. `hidden`: the sessions hidden from the sidebar (id -> when), which
-  // don't buzz. A tap on a notification opens what a tap on its row opens.
+  // and for eTL's, Slack's and TodoMate's notices (notify.js). `hidden`: the sessions hidden from
+  // the sidebar (id -> when), which don't buzz, and neither does what's turned off under Phone →
+  // Notifications. Looked at again every minute (CLOCK_MS), for TodoMate's schedule items, which
+  // buzz by the clock. A tap on a notification opens what a tap on its row opens.
   observe(sessions, hidden = {}) {
     if (!this.server) return;
-    const { memory, events } = pushEvents(this.memory, sessions, this.now(), (id) => Object.hasOwn(hidden, id));
+    this.last = { sessions, hidden };
+    if (!this.clock) {
+      this.clock = setInterval(() => this.observe(this.last.sessions, this.last.hidden), CLOCK_MS);
+      this.clock.unref?.();
+    }
+    const statuses = this.settings.get('phoneSessionPush') ?? {};
+    const notices = this.settings.get('phoneNoticePush') ?? {};
+    const muted = (s) => Object.hasOwn(hidden, s.id)
+      || (Object.hasOwn(NOTICE_SOURCES, s.kind) ? notices[s.kind] === false : statuses[s.status] === false);
+    const { memory, events } = pushEvents(this.memory, sessions, this.now(), muted);
     this.memory = memory;
     if (!events.length) return;
     this.#rebuild();   // the rows as they are now, for what each notification opens
@@ -383,6 +398,7 @@ class PhoneFeature extends EventEmitter {
         click: (mi) => this.setEnabled(mi.checked).catch((err) => this.log('phone:', err.message)),
       },
       { label: 'Pair a phone…', enabled: on, click: () => this.showPairing().catch((err) => this.log('phone:', err.message)) },
+      { label: 'Notifications', enabled: on, submenu: this.#pushMenu() },
       {
         label: 'Send a test notification',
         enabled: on && subscribed.length > 0,
@@ -402,6 +418,25 @@ class PhoneFeature extends EventEmitter {
     }
     if (on && this.listening == null) items.push({ type: 'separator' }, { label: `Port ${this.port} is taken; nothing is served`, enabled: false });
     return { label: 'Phone', submenu: items };
+  }
+
+  // What buzzes the phone: each session status, and each source of notices (notify.js).
+  #pushMenu() {
+    const item = (key, value, label) => ({
+      label,
+      type: 'checkbox',
+      checked: this.settings.get(key)?.[value] !== false,
+      click: (mi) => this.settings.set({ [key]: { ...this.settings.get(key), [value]: mi.checked } }),
+    });
+    return [
+      item('phoneSessionPush', 'review', `Session: ${LABELS.review} (a turn finished)`),
+      item('phoneSessionPush', 'waiting', `Session: ${LABELS.waiting} (waiting for your answer or approval)`),
+      item('phoneSessionPush', 'failed', `Session: ${LABELS.failed}`),
+      { type: 'separator' },
+      item('phoneNoticePush', 'etl', 'eTL: new notices, assignments, grades, 마감 임박'),
+      item('phoneNoticePush', 'slack', 'Slack 발표: D-Day every day at 06:00, 순서 변경'),
+      item('phoneNoticePush', 'todomate', '투두메이트: D-Day at 06:00, schedule 15 min before'),
+    ];
   }
 
   // ---------------------------------------------------------------- inside

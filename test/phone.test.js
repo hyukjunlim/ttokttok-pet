@@ -59,10 +59,10 @@ test('a session hidden from the sidebar doesn\'t buzz, nor for what it did while
   const hidden = new Set(['codex:h']);
   let { memory } = pushEvents(null, [s], 0);
   let events;
-  ({ memory, events } = pushEvents(memory, [{ ...s, status: 'review', since: 500_000 }], 1, (id) => hidden.has(id)));
+  ({ memory, events } = pushEvents(memory, [{ ...s, status: 'review', since: 500_000 }], 1, (s2) => hidden.has(s2.id)));
   assert.equal(events.length, 0);
   hidden.clear();
-  ({ memory, events } = pushEvents(memory, [{ ...s, status: 'review', since: 500_000 }], 2, (id) => hidden.has(id)));
+  ({ memory, events } = pushEvents(memory, [{ ...s, status: 'review', since: 500_000 }], 2, (s2) => hidden.has(s2.id)));
   assert.equal(events.length, 0);
   ({ memory, events } = pushEvents(memory, [{ ...s, status: 'running', since: 600_000 }], 3));
   ({ memory, events } = pushEvents(memory, [{ ...s, status: 'waiting', since: 700_000 }], 4));
@@ -113,14 +113,46 @@ test('Slack: each presentation reminder and 순서 변경 buzz once; token and t
   assert.deepEqual(events.map((e) => e.title), ['D-3 · 11/10(화) 짧은 발표 2'], 'the next reminder buzzes again');
 });
 
-test("the other days' D-X and TodoMate's bubbles show but never buzz", () => {
-  const { memory } = pushEvents(null, [], 0);
-  const { events } = pushEvents(memory, [
-    { id: 'slack:daily:2026-12-22:긴 발표:2026-11-03', kind: 'slack', status: 'idle', badge: 'D-49', title: '12/22(화) 긴 발표' },
-    { id: 'todomate:dday:2026-11-06:t1:2026-11-03', kind: 'todomate', status: 'review', badge: 'D-3', title: '11/6(금) 저널클럽 발표' },
-    { id: 'todomate:2026-11-03:t2', kind: 'todomate', status: 'review', badge: '13:00', title: '프로젝트 미팅' },
-  ], 1);
-  assert.deepEqual(events, []);
+test("Slack's other days' D-X and TodoMate's D-Day countdowns buzz once each morning; TodoMate's trouble doesn't", () => {
+  let { memory } = pushEvents(null, [], 0);
+  let events;
+  const daily = (day) => ({ id: `slack:daily:2026-12-22:긴 발표:${day}`, kind: 'slack', status: 'idle', badge: 'D-49', title: '12/22(화) 긴 발표' });
+  const dday = (day) => ({ id: `todomate:dday:2026-11-06:t1:${day}`, kind: 'todomate', status: 'review', badge: 'D-3', title: '11/6(금) 저널클럽 발표', project: '' });
+  ({ memory, events } = pushEvents(memory, [
+    daily('2026-11-03'),
+    dday('2026-11-03'),
+    { id: 'todomate:auth', kind: 'todomate', status: 'waiting', badge: '연결 필요', title: 'PlayMCP' },
+  ], 1));
+  assert.deepEqual(events.map((e) => [e.title, e.body]), [
+    ['D-49 · 12/22(화) 긴 발표', 'Slack'],
+    ['D-3 · 11/6(금) 저널클럽 발표', '투두메이트'],
+  ]);
+  ({ memory, events } = pushEvents(memory, [daily('2026-11-03'), dday('2026-11-03')], 2));
+  assert.equal(events.length, 0, 'once a day');
+  ({ events } = pushEvents(memory, [daily('2026-11-04'), dday('2026-11-04')], 3));
+  assert.equal(events.length, 2, 'and again the next morning');
+});
+
+test('a TodoMate schedule item buzzes once, 15 minutes before it starts', () => {
+  const start = Date.parse('2026-11-05T13:00:00+09:00');
+  const item = (startsAt, project) => ({ id: 'todomate:2026-11-05:t2', kind: 'todomate', status: 'review', badge: '13:00', title: '프로젝트 미팅', project, startsAt });
+  const at = (min) => start - min * 60_000;
+  let { memory, events } = pushEvents(null, [item(start, '16분 후')], at(16));
+  assert.equal(events.length, 0, 'not yet');
+  ({ memory, events } = pushEvents(memory, [item(start, '15분 후')], at(15)));
+  assert.deepEqual(events.map((e) => [e.title, e.body, e.kind]), [['13:00 · 프로젝트 미팅', '15분 후', 'todomate']]);
+  ({ memory, events } = pushEvents(memory, [item(start, '14분 후')], at(14)));
+  assert.equal(events.length, 0, 'once');
+  const later = start + 60 * 60_000;
+  ({ memory, events } = pushEvents(memory, [item(later, '1시간 10분 후')], at(10)));
+  assert.equal(events.length, 0, 'moved an hour later: not yet');
+  ({ events } = pushEvents(memory, [item(later, '10분 후')], later - 10 * 60_000));
+  assert.equal(events.length, 1, 'and buzzes before its new time');
+
+  ({ events } = pushEvents(null, [item(start, '5분 후')], at(5)));
+  assert.equal(events.length, 1, 'one about to start buzzes even when the companion just started');
+  ({ events } = pushEvents(null, [item(start, '진행 중 · ~14:00')], start + 60_000));
+  assert.equal(events.length, 0, 'one already under way doesn\'t');
 });
 
 test('a Slack notice opens its canvas in Slack, and nothing outside a workspace', () => {
@@ -357,6 +389,61 @@ test('a notification opens what its row opens; a hidden session sends none', asy
     ['cli:a', 'Ready · A', { app: 'claude', url: link }],
     ['codex:cloud', 'Ready · Cloud', { app: 'chatgpt', url: 'https://chatgpt.com/codex' }],
   ]);
+});
+
+test('statuses turned off under Session notifications don\'t buzz; eTL notices and the other statuses still do', async (t) => {
+  const { f, push, port } = await running(t);
+  const origin = `http://127.0.0.1:${port}`;
+  const code = f.newCode();
+  const cookie = (await call(port, { method: 'POST', path: '/api/pair', origin, body: { code } })).headers['set-cookie'][0].split(';')[0];
+  const phone = phoneSubscription();
+  await call(port, { method: 'POST', path: '/api/push', origin, cookie, body: { subscription: phone.sub } });
+
+  // Untick Ready in the tray menu.
+  const checks = () => f.menu().submenu.find((i) => i.label === 'Notifications').submenu.filter((i) => i.type === 'checkbox');
+  const sub = f.menu().submenu.find((i) => i.label === 'Notifications');
+  assert.equal(sub.enabled, true);
+  assert.deepEqual(checks().map((i) => i.checked), [true, true, true, true, true, true]);
+  checks()[0].click({ checked: false });
+  assert.deepEqual(checks().map((i) => i.checked), [false, true, true, true, true, true]);
+
+  f.observe([{ id: 'cli:a', kind: 'cli', status: 'running', since: 1, title: 'A' }, { id: 'cli:b', kind: 'cli', status: 'running', since: 1, title: 'B' }]);
+  f.observe([
+    { id: 'cli:a', kind: 'cli', status: 'review', since: 2, title: 'A' },
+    { id: 'cli:b', kind: 'cli', status: 'waiting', since: 2, title: 'B' },
+    { id: 'etl:ann:9', kind: 'etl', badge: '새 공지', title: 'Notice' },
+  ]);
+  await new Promise((r) => setImmediate(r));
+  assert.deepEqual(push.sent.map((p) => phone.read(p.body).title), ['Needs you · B', '새 공지 · Notice']);
+
+  // Ticking it again doesn't buzz for the turn that finished while it was off.
+  checks()[0].click({ checked: true });
+  f.observe([{ id: 'cli:a', kind: 'cli', status: 'review', since: 2, title: 'A' }]);
+  await new Promise((r) => setImmediate(r));
+  assert.equal(push.sent.length, 2);
+});
+
+test('eTL, Slack and TodoMate notices each turn off on their own, and the list is looked at every minute', async (t) => {
+  const { f, push, port } = await running(t);
+  const origin = `http://127.0.0.1:${port}`;
+  const code = f.newCode();
+  const cookie = (await call(port, { method: 'POST', path: '/api/pair', origin, body: { code } })).headers['set-cookie'][0].split(';')[0];
+  const phone = phoneSubscription();
+  await call(port, { method: 'POST', path: '/api/push', origin, cookie, body: { subscription: phone.sub } });
+
+  const todomate = f.menu().submenu.find((i) => i.label === 'Notifications').submenu.find((i) => i.label?.startsWith('투두메이트'));
+  todomate.click({ checked: false });
+  f.observe([]);
+  assert.ok(f.clock, 'a clock while the companion runs');
+  f.observe([
+    { id: 'todomate:dday:2026-11-06:t1:2026-11-03', kind: 'todomate', status: 'review', badge: 'D-3', title: '저널클럽 발표' },
+    { id: 'slack:daily:2026-12-22:긴 발표:2026-11-03', kind: 'slack', status: 'idle', badge: 'D-49', title: '긴 발표' },
+    { id: 'etl:new:7', kind: 'etl', badge: '새 과제', title: 'HW3' },
+  ]);
+  await new Promise((r) => setImmediate(r));
+  assert.deepEqual(push.sent.map((p) => phone.read(p.body).title), ['D-49 · 긴 발표', '새 과제 · HW3']);
+  f.stop();
+  assert.equal(f.clock, null, 'and none once it stops');
 });
 
 test('a sample eTL notice shows on the phone for a while and comes as a notification', async (t) => {
