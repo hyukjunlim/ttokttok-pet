@@ -498,10 +498,11 @@ watching and the phone only shows what the pet sends it, so the PC has to be on 
   TodoMate app. Where the app isn't installed,
   the page opens on the web. (On Android the link names the app's package, and Android itself
   falls back to the web page.)
-- **Notifications:** when a session turns *Ready*, *Needs you* or *Error*, and when a new eTL
-  bubble comes: 마감 임박, 마감 변경, 새 과제, 성적, 새 공지 (보강 공지, 휴강 공지) and 토큰 만료;
-  and Slack's reminders on D-7, D-3, D-1 and D-Day (not the other days' D-X) and 순서 변경.
-  TodoMate's bubbles never notify.
+- **Notifications:** when a session turns *Ready*, *Needs you* or *Error*; when a new eTL bubble
+  comes: 마감 임박, 마감 변경, 새 과제, 성적, 새 공지 (보강 공지, 휴강 공지) and 토큰 만료; every
+  morning at 06:00, for each Slack presentation's D-X and each TodoMate D-Day countdown; when
+  Slack's 순서 변경 comes; and 15 minutes before each TodoMate schedule item starts. Tray menu →
+  *Phone* → *Notifications* turns each session status and each source off on its own.
   *Running*, today's classes and sessions hidden from the sidebar don't notify, and neither does
   what's already showing when the companion starts. Tapping one opens a small page about it with
   one button into its app: the session in Claude or ChatGPT, the notice in LearningX. (A phone
@@ -696,7 +697,7 @@ sleep, and on *지금 확인*. For each turn to come:
 - **D-X**, every morning from 06:00: `D-7 11/10(화) 짧은 발표 2` counts down a day at a time to
   **D-Day**, which stays until the presentation ends. They're made from the last schedule read, so
   a check that fails doesn't lose one. D-7, D-3, D-1 and D-Day stand out; the other days stay
-  quiet.
+  quiet on the PC. The phone gets every day's.
 - **순서 변경** appears when one of your turns to come is added, removed or moved to another column.
   It stays for 3 days.
 - **토큰 확인** appears when Slack stops accepting the token. The pet then stops asking until you set
@@ -751,7 +752,8 @@ and on *지금 확인*.
 - **연결 필요** appears when PlayMCP stops accepting the connection. Clicking it asks for a new
   connection prompt.
 
-*카테고리* and *D-Day 카테고리* in the menu pick other categories. None of these notify the phone.
+*카테고리* and *D-Day 카테고리* in the menu pick other categories. The phone gets each D-Day
+countdown at 06:00 and each schedule item 15 minutes before it starts.
 
 **Security.** PlayMCP's tokens are encrypted with `safeStorage`, like eTL's, and renewed as they
 expire (about every 12 hours; a fresh connection prompt is needed after about three months). The

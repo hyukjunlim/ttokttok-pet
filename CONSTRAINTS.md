@@ -69,10 +69,12 @@ Hard constraints for Ttokttok Pet. Change them only with the owner's approval.
 - Off until the user turns it on. A phone gets in only after pairing with a code the pet shows.
 - Shows what the sidebar shows: the host › folder tree with each session's status, eTL's notices
   and the weekly limits. It never chats.
-- Pushes when a session turns Ready, Needs you or Error, and when a new eTL bubble appears
-  (마감 임박, 마감 변경, 새 과제, 성적, 새 공지, 토큰 만료), and when a presentation reminder from
-  Slack appears (D-7, D-3, D-1, D-Day, 순서 변경; not the other days' D-X). Running and today's
-  classes don't push.
+- Pushes when a session turns Ready, Needs you or Error; when a new eTL bubble appears (마감 임박,
+  마감 변경, 새 과제, 성적, 새 공지, 토큰 만료); each morning from 06:00, for each Slack
+  presentation's D-X reminder and each TodoMate D-Day countdown; when Slack's 순서 변경 appears; and
+  15 minutes before each TodoMate schedule item starts. Running and today's classes don't push.
+  Each session status and each source (eTL, Slack, TodoMate) can be turned off under tray menu →
+  Phone → Notifications; all are on by default.
 - An eTL notice opens in the LearningX Student app where the phone allows it, otherwise on the web.
 - Works only while the PC is on and awake; the phone never checks eTL or reads sessions itself.
 - Out of scope: replying from the phone, the animated pet on the phone, any server run by the
@@ -99,7 +101,7 @@ Hard constraints for Ttokttok Pet. Change them only with the owner's approval.
   (`11/6 …`), on any day of the last 30 days. Every morning from 06:00, a
   `D-3 11/6(금) 저널클럽 발표` bubble until that day ends. Clicking one clears it until the
   next morning.
-- No phone push.
+- Pushes to the phone as the Phone companion section says.
 - Works only while the PC is on and awake.
 
 ## Personal data
