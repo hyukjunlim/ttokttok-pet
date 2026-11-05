@@ -5,7 +5,8 @@ const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
 const { spawn } = require('node:child_process');
 const {
-  BROWSER_HELPER, HELPER, VSCODE_HELPER, raiseBrowserWindow, raiseCodexWindow, raiseVsCodeWindow, vsCodePlace,
+  BROWSER_HELPER, HELPER, PASEO_HELPER, VSCODE_HELPER,
+  raiseBrowserWindow, raiseCodexWindow, raisePaseoWindow, raiseVsCodeWindow, vsCodePlace,
 } = require('../src/raise');
 
 function fakeSpawn() {
@@ -43,7 +44,7 @@ test('both helpers send Alt only when the window is not in front, with an unassi
     'keybd_event(0x12, 0, 2,',                   // Alt up
     'return SetForegroundWindow(h)',
   ];
-  for (const script of [HELPER, BROWSER_HELPER, VSCODE_HELPER]) {
+  for (const script of [HELPER, BROWSER_HELPER, VSCODE_HELPER, PASEO_HELPER]) {
     const raise = script.slice(script.indexOf('public static bool Raise('));
     const at = steps.map((s) => raise.indexOf(s));
     assert.ok(at.every((i) => i >= 0), `missing step in Raise: ${steps[at.indexOf(-1)]}`);
@@ -92,6 +93,26 @@ test("a VS Code window is raised by its machine's mark in the title, which reach
   runs[1].child.emit('exit', 2);
   assert.equal(await none, false, 'no window for that machine');
   assert.equal(await raiseVsCodeWindow({ spawnFn, platform: 'darwin' }), null);
+});
+
+// Starting Paseo.exe while it runs opens a second window, so the pet must tell "raised" from "none".
+test("Paseo's open window is raised (and maximized in folder mode); exit 2 says it has none", async () => {
+  const { runs, spawnFn } = fakeSpawn();
+  const raised = raisePaseoWindow({ spawnFn, platform: 'win32', env: { PATH: 'x' } });
+  const { opts, args } = runs[0];
+  assert.equal(Buffer.from(args.at(-1), 'base64').toString('utf16le'), PASEO_HELPER);
+  assert.equal(opts.env.PET_RAISE_MAXIMIZE, '0');
+  assert.equal(opts.env.PATH, 'x');
+  runs[0].child.emit('exit', 0);
+  assert.equal(await raised, true);
+  const none = raisePaseoWindow({ maximize: true, spawnFn, platform: 'win32', env: {} });
+  assert.equal(runs[1].opts.env.PET_RAISE_MAXIMIZE, '1');
+  runs[1].child.emit('exit', 2);
+  assert.equal(await none, false, 'no Paseo window');
+  const killed = raisePaseoWindow({ spawnFn, platform: 'win32', env: {} });
+  runs[2].child.emit('exit', null);
+  assert.equal(await killed, null, "a replaced helper can't tell");
+  assert.equal(await raisePaseoWindow({ spawnFn, platform: 'darwin' }), null);
 });
 
 test('the VS Code helper runs, and finds no window for a machine nobody has open', { skip: process.platform !== 'win32' && 'Windows only' }, async () => {

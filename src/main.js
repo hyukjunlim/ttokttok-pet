@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { execFile, execFileSync } = require('node:child_process');
+const { execFile, execFileSync, spawn } = require('node:child_process');
 const { pathToFileURL } = require('node:url');
 const { format } = require('node:util');
 const {
@@ -23,7 +23,7 @@ const { isSameHost, sshConfigHosts } = require('./ssh-config');
 const { cleanShape, shapeForWindow, NO_SHAPE } = require('./shape');
 const { DemoTracker } = require('./demo');
 const { checkForRelease, checkForUpdate, startUpdate } = require('./updater');
-const { raiseBrowserWindow, raiseCodexWindow, raiseVsCodeWindow, vsCodePlace } = require('./raise');
+const { raiseBrowserWindow, raiseCodexWindow, raisePaseoWindow, raiseVsCodeWindow, vsCodePlace } = require('./raise');
 const { archiveCodexChat, canDelete, deleteClaudeSession, isChat } = require('./chat-delete');
 const { watchWindowOrder } = require('./window-order');
 const { EtlFeature } = require('./etl/feature');
@@ -915,8 +915,20 @@ function claudeInstalled() {
   return fs.existsSync(path.join(app.getPath('appData'), 'Claude'));
 }
 
-// What clicking the pet opens: Claude, like ChatGPT's pet opens its app, or Codex for someone
-// who has only Codex.
+// Paseo, installed per user. With it, clicking the pet opens Paseo (openPaseo) instead of the
+// app mainAppLink names.
+function paseoExe() {
+  const local = process.env.LOCALAPPDATA;
+  return local ? path.join(local, 'Programs', 'Paseo', 'Paseo.exe') : null;
+}
+
+function paseoInstalled() {
+  const exe = paseoExe();
+  return process.platform === 'win32' && !!exe && fs.existsSync(exe);
+}
+
+// What clicking the pet opens without Paseo: Claude, like ChatGPT's pet opens its app, or Codex
+// for someone who has only Codex.
 function mainAppLink() {
   if (claudeInstalled()) return APP_LINK.claude;
   return codexInstalled() ? APP_LINK.codex : null;
@@ -1526,6 +1538,24 @@ function openApp(url, { handoff = true } = {}) {
   if (url.startsWith('codex:')) raiseCodexWindow();   // a reopened Codex window stays behind otherwise
 }
 
+// Paseo's window that's open comes to the front (raise.js); with none, Paseo starts. Starting
+// Paseo.exe while a window is open would open a second one, so it's only for "none" (false), not
+// for "couldn't tell" (null). `fill`: folder mode keeps the app maximized beside the sidebar.
+async function openPaseo({ handoff = true, fill = false } = {}) {
+  if (handoff) handOffFocus();
+  const raised = await raisePaseoWindow({ maximize: fill });
+  if (raised !== false) return;
+  try {
+    const c = spawn(paseoExe(), [], { detached: true, stdio: 'ignore', windowsHide: false });
+    c.on('error', (err) => log('could not start Paseo:', err.message));
+    c.unref();
+  } catch (err) {
+    log('could not start Paseo:', err.message);
+    return;
+  }
+  if (fill) maximizeApps('open', 'paseo');
+}
+
 // A web chat opens in the tab that shows it: the extension brings the tab forward in its window,
 // and the pet brings that window to the front. With no such tab left, its address opens instead.
 function openWebChat(s, { handoff = true } = {}) {
@@ -1694,7 +1724,11 @@ function registerIpc() {
       if (!openSession(id)) wake();     // terminal sessions have nothing to open
       return;
     }
-    const url = mainAppLink();          // clicking the pet opens Claude, like ChatGPT's pet
+    if (paseoInstalled()) {             // clicking the pet opens Paseo when it's installed
+      openPaseo();
+      return;
+    }
+    const url = mainAppLink();          // otherwise Claude, like ChatGPT's pet
     if (url) openApp(url);
     else wake();
   });
@@ -1771,6 +1805,10 @@ function registerIpc() {
   });
   ipcMain.on('folder:pet-click', (e) => {
     if (!fromFolder(e)) return;
+    if (paseoInstalled()) {
+      openPaseo({ handoff: false, fill: true });
+      return;
+    }
     const url = mainAppLink();
     if (!url) return;
     openApp(url, { handoff: false });

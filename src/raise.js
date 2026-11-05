@@ -175,6 +175,62 @@ foreach ($w in [PetRaiseVsCode]::Windows($pids)) {
 exit 2
 `;
 
+// The same for Paseo, which clicking the pet opens when it's installed. Paseo has no link of its
+// own, and starting Paseo.exe while it runs opens one more window, so the pet raises the window
+// that's open (the one used last, of several) and starts Paseo only when there's none.
+// PET_RAISE_MAXIMIZE=1 (folder mode) maximizes it too. Exit code 2: Paseo has no window open.
+const PASEO_HELPER = String.raw`
+$ErrorActionPreference = 'Stop'
+Add-Type -TypeDefinition @'
+using System;
+using System.Text;
+using System.Runtime.InteropServices;
+public static class PetRaisePaseo {
+  delegate bool EnumProc(IntPtr h, IntPtr l);
+  [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc f, IntPtr l);
+  [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr h, StringBuilder s, int n);
+  [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+  [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr h);
+  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int cmd);
+  [DllImport("user32.dll")] static extern bool IsIconic(IntPtr h);
+  [DllImport("user32.dll")] static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
+  // Top to bottom, so the first is the one used last.
+  public static IntPtr Find(uint[] pids) {
+    IntPtr found = IntPtr.Zero;
+    EnumWindows((h, l) => {
+      if (!IsWindowVisible(h)) return true;
+      uint pid;
+      GetWindowThreadProcessId(h, out pid);
+      if (Array.IndexOf(pids, pid) < 0) return true;
+      var s = new StringBuilder(256);
+      if (GetWindowText(h, s, s.Capacity) == 0) return true;
+      found = h;
+      return false;
+    }, IntPtr.Zero);
+    return found;
+  }
+  public static bool Raise(IntPtr h) {
+    if (IsIconic(h)) ShowWindow(h, 9);              // SW_RESTORE
+    if (GetForegroundWindow() == h) return true;    // in front already: no key event needed
+    keybd_event(0x12, 0, 0, UIntPtr.Zero);          // Alt down
+    keybd_event(0xE8, 0, 0, UIntPtr.Zero);          // unassigned key, so the Alt
+    keybd_event(0xE8, 0, 2, UIntPtr.Zero);          //   isn't a lone tap that opens a menu
+    keybd_event(0x12, 0, 2, UIntPtr.Zero);          // Alt up
+    return SetForegroundWindow(h);
+  }
+}
+'@
+$pids = [uint32[]]@(Get-Process -Name 'Paseo' -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
+if (-not $pids.Count) { exit 2 }
+$h = [PetRaisePaseo]::Find($pids)
+if ($h -eq [IntPtr]::Zero) { exit 2 }
+[void][PetRaisePaseo]::Raise($h)
+if ($env:PET_RAISE_MAXIMIZE -eq '1') { [void][PetRaisePaseo]::ShowWindow($h, 3) }   # SW_MAXIMIZE
+exit 0
+`;
+
 let child = null;
 
 function runHelper(script, spawnFn, env) {
@@ -242,4 +298,18 @@ function raiseVsCodeWindow({ marks = [], spawnFn = spawn, platform = process.pla
   });
 }
 
-module.exports = { BROWSER_HELPER, HELPER, VSCODE_HELPER, raiseBrowserWindow, raiseCodexWindow, raiseVsCodeWindow, vsCodePlace };
+// Resolves true once a Paseo window is in front, false if Paseo has none open, null if it couldn't
+// tell (not Windows, or a newer raise took over).
+function raisePaseoWindow({ maximize = false, spawnFn = spawn, platform = process.platform, env = process.env } = {}) {
+  if (platform !== 'win32') return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const c = runHelper(PASEO_HELPER, spawnFn, { ...env, PET_RAISE_MAXIMIZE: maximize ? '1' : '0' });
+    c.on('error', () => resolve(null));
+    c.on('exit', (code) => resolve(code === 0 ? true : code === 2 ? false : null));
+  });
+}
+
+module.exports = {
+  BROWSER_HELPER, HELPER, PASEO_HELPER, VSCODE_HELPER,
+  raiseBrowserWindow, raiseCodexWindow, raisePaseoWindow, raiseVsCodeWindow, vsCodePlace,
+};

@@ -42,6 +42,8 @@ public static class PetMaximize {
 function Find($app) {
   if ($app -eq 'codex') {
     $p = Get-Process ChatGPT -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 -and $_.Path -like '*OpenAI.Codex*' }
+  } elseif ($app -eq 'paseo') {
+    $p = Get-Process Paseo -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle -ne '' }
   } else {
     # The desktop app, not the claude CLI (which has no window of its own).
     $p = Get-Process claude -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle -ne '' }
@@ -64,12 +66,13 @@ foreach ($h in ($found | Sort-Object { -$order.IndexOf([IntPtr]$_) })) { [void][
 
 let child = null;
 
-// `action`: 'open' with `app` ('claude' or 'codex'), or 'all'. One helper at a time; a newer
-// request replaces an older one.
+// `action`: 'open' with `app` ('claude', 'codex' or 'paseo', which the pet starts when it has no
+// window), or 'all' (Claude and Codex). One helper at a time; a newer request replaces an older one.
 function maximizeApps(action, app = 'claude', { spawnFn = spawn, platform = process.platform } = {}) {
   if (platform !== 'win32') return null;
   child?.kill();
-  const text = HELPER.replace("'ACTION'", `'${action === 'open' ? 'open' : 'all'}'`).replace("'APP'", `'${app === 'codex' ? 'codex' : 'claude'}'`);
+  const which = ['codex', 'paseo'].includes(app) ? app : 'claude';
+  const text = HELPER.replace("'ACTION'", `'${action === 'open' ? 'open' : 'all'}'`).replace("'APP'", `'${which}'`);
   const args = ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(text, 'utf16le').toString('base64')];
   const c = spawnFn('powershell.exe', args, { windowsHide: true, stdio: 'ignore' });
   child = c;
