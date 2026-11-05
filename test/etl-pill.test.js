@@ -59,11 +59,12 @@ function page() {
   for (const method of ['ready', 'setShape', 'dragStart', 'dragMove', 'dragEnd', 'activate', 'dismiss', 'traySize', 'contextMenu']) {
     api[method] = () => {};
   }
+  const acted = { base: null, played: [] };   // what the pet was told to act out
   class SpritePlayer {
     hitTest() { return false; }
     shapeRects() { return []; }
-    setBase() {}
-    playOnce() {}
+    setBase(status) { acted.base = status; }
+    playOnce(name) { acted.played.push(name); }
   }
   const context = {
     window: { pet: api, SpritePlayer, innerWidth: 400, innerHeight: 500, addEventListener() {} },
@@ -72,11 +73,14 @@ function page() {
     matchMedia: () => ({ addEventListener() {} }),
   };
   vm.runInNewContext(fs.readFileSync(filename, 'utf8'), context, { filename });
-  // The bubbles for these sessions, in order.
-  return (sessions) => {
-    callbacks.Sessions({ sessions, showActivity: true });
+  // The bubbles for these sessions, in order. `options`: the rest of what main.js sends with them.
+  const show = (sessions, options = {}) => {
+    callbacks.Sessions({ sessions, showActivity: true, ...options });
     return nodes.tray.children;
   };
+  show.badge = nodes.badge;
+  show.acted = acted;
+  return show;
 }
 
 function find(el, className) {
@@ -198,4 +202,40 @@ test("Codex's chats in VS Code or a terminal say so", () => {
   assert.equal(ext.getAttribute('aria-label'), 'Reframe, Click to open in VS Code');
   assert.equal(find(tui, 'what').textContent, 'Codex · Terminal · notes');
   assert.equal(tui.getAttribute('aria-label'), 'Notes, on lab, Terminal session (no link)');
+});
+
+test("with session bubbles off, eTL's, Slack's and TodoMate's stay, with no badge", () => {
+  const show = page();
+  const list = [
+    { id: 'local_a', kind: 'desktop', status: 'waiting', title: 'Asks' },
+    { id: 'codex:b', kind: 'codex', status: 'review', title: 'Done' },
+    { id: 'cli:c', kind: 'cli', status: 'running', title: 'Working' },
+    NOTICE,
+    { id: 'slack:remind:a:d7', kind: 'slack', status: 'review', badge: 'D-7', title: '발표' },
+    { id: 'todomate:dday:x', kind: 'todomate', status: 'review', badge: 'D-3', title: '저널클럽' },
+  ];
+  const ids = (bubbles) => bubbles.filter((b) => b.getAttribute('role') === 'listitem').length;
+  assert.equal(ids(show(list)), 6);
+  assert.equal(show.badge.hidden, true, 'no badge while every bubble shows');
+  assert.equal(ids(show(list, { showSessions: false })), 3);
+  assert.equal(show.badge.hidden, true, 'no badge for the hidden sessions');
+  show(list, { showActivity: false });
+  assert.equal(show.badge.textContent, '5', 'all bubbles off: every one that needs attention');
+});
+
+test("with session bubbles off, a session's Needs you or Ready doesn't move the pet; with None it still does", () => {
+  const show = page();
+  const run = { id: 'local_a', kind: 'desktop', status: 'running', title: 'Work' };
+  const notice = { id: 'todomate:dday:x', kind: 'todomate', status: 'idle', badge: 'D-3', title: '저널클럽' };
+  const off = { showSessions: false };
+  show([{ ...run, status: 'waiting' }, notice], off);
+  assert.equal(show.acted.base, 'idle', 'acts out the notice, not the session that needs you');
+  show([run, notice], off);
+  show([{ ...run, status: 'review' }, notice], off);
+  assert.deepEqual(show.acted.played, [], 'no jump when a session finishes');
+  show([{ ...run, status: 'waiting' }, notice], { showActivity: false, showSessions: false });
+  assert.equal(show.acted.base, 'waiting', 'None: no bubbles, but the pet acts out everything');
+  show([run, notice]);
+  show([{ ...run, status: 'review' }, notice]);
+  assert.deepEqual(show.acted.played, ['jumping'], 'All: it jumps');
 });

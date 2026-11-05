@@ -529,7 +529,11 @@ function sendSessions() {
   if (!win || win.isDestroyed()) return;
   // Getting started's practice bubble goes first, and shows even with the bubbles turned off.
   const practice = gettingStarted?.petItems() ?? [];
-  win.webContents.send('pet:sessions', { sessions: [...practice, ...sessions], showActivity: settings.get('showActivity') || practice.length > 0 });
+  win.webContents.send('pet:sessions', {
+    sessions: [...practice, ...sessions],
+    showActivity: settings.get('showActivity') || practice.length > 0,
+    showSessions: settings.get('showSessionBubbles') !== false,
+  });
   if (tray) tray.setToolTip(trayTooltip());
 }
 
@@ -1976,14 +1980,25 @@ function appearanceMenu(folderMode) {
   }
   items.push({ type: 'separator' });
   if (!folderMode) {
-    items.push({
-      label: 'Show activity bubbles',
-      type: 'checkbox',
-      checked: settings.get('showActivity'),
-      click: (mi) => {
-        settings.set({ showActivity: mi.checked });
+    // Which bubbles the pet shows; with none, a badge on it counts what needs you. Kept as
+    // showActivity (any bubbles) and showSessionBubbles (sessions' too).
+    const shown = !settings.get('showActivity') ? 'none' : settings.get('showSessionBubbles') === false ? 'notices' : 'all';
+    const bubbles = (value, label, patch) => ({
+      label,
+      type: 'radio',
+      checked: shown === value,
+      click: () => {
+        settings.set(patch);
         sendSessions();
       },
+    });
+    items.push({
+      label: 'Bubbles',
+      submenu: [
+        bubbles('all', 'All', { showActivity: true, showSessionBubbles: true }),
+        bubbles('notices', 'eTL, Slack and TodoMate only (no sessions)', { showActivity: true, showSessionBubbles: false }),
+        bubbles('none', 'None (a badge counts what needs you)', { showActivity: false }),
+      ],
     });
   }
   items.push({

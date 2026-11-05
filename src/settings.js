@@ -17,7 +17,8 @@ const DEFAULTS = {
   folderPetScale: 0.5,     // the size of the pet at the sidebar's foot (Small; tray menu → Appearance → Size in folder mode)
   visible: true,
   position: null,          // top-left of the pet sprite, in screen DIPs
-  showActivity: true,
+  showActivity: true,      // the floating pet's bubbles (tray menu → Appearance → Bubbles); off: None
+  showSessionBubbles: true, // ... sessions' too (Claude, Codex, web chats); off: eTL's, Slack's and TodoMate's only, no badge
   alwaysAnimate: true,     // animate even when Windows' Animation effects are off
   showUsage: true,         // the weekly-limit meter next to the pet
   claudeUsageOverSsh: true,  // read Claude's usage from the mod on SSH hosts

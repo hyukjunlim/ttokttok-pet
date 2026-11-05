@@ -18,11 +18,13 @@
   const LABELS = { waiting: 'Needs you', failed: 'Error', review: 'Ready', running: 'Running', background: 'Background' };
   const BUSY = new Set(['running', 'background']);   // still going: nothing to dismiss
   const ATTENTION = new Set(['waiting', 'failed', 'review']);
+  const NOTICES = new Set(['etl', 'slack', 'todomate', 'practice']);   // bubbles that aren't sessions
   const ETL_LINK = /^https:\/\/myetl\.snu\.ac\.kr\//;
   const SHADOW_ROOM = 16;          // px kept around the bubbles so their shadows aren't cut off
 
   let sessions = [];
   let showActivity = true;
+  let showSessions = true;     // ... sessions' bubbles too, not only eTL's, Slack's and TodoMate's
   let usage = [];              // weekly limits: [{ app, name, percent, elapsed, resetsIn }]
   let drag = null;
   let awaitingLanding = false;
@@ -92,10 +94,17 @@
   api.onSessions((payload) => {
     sessions = payload.sessions || [];
     showActivity = payload.showActivity !== false;
+    showSessions = payload.showSessions !== false;
     reactToChanges();
     render();
-    player.setBase(sessions[0]?.status || 'idle');   // background has no animation: the pet idles
+    player.setBase(acting()[0]?.status || 'idle');   // background has no animation: the pet idles
   });
+
+  // What the pet acts out: the most urgent of the list, less the sessions when their bubbles are
+  // hidden (eTL's, Slack's and TodoMate's only); then a session's Needs you or Ready doesn't move it.
+  function acting() {
+    return showActivity && !showSessions ? sessions.filter((s) => NOTICES.has(s.kind)) : sessions;
+  }
 
   api.onUsage((items) => {
     usage = Array.isArray(items) ? items : [];
@@ -104,14 +113,15 @@
   });
 
   function reactToChanges() {
-    const next = new Map(sessions.map((s) => [s.id, s.status]));
+    const list = acting();
+    const next = new Map(list.map((s) => [s.id, s.status]));
     let finished = false;
     for (const [id, status] of next) {
       const before = previous.get(id);
       if (BUSY.has(before) && status === 'review') finished = true;
     }
     previous = next;
-    if (finished && sessions[0]?.status === 'review') player.playOnce('jumping');
+    if (finished && list[0]?.status === 'review') player.playOnce('jumping');
   }
 
   let renderedIds = new Set();
@@ -119,7 +129,7 @@
   function render() {
     trayEl.replaceChildren();
     if (usage.length) trayEl.append(meterEl);   // next to the pet, with the bubbles beyond it
-    const visible = showActivity ? sessions : [];
+    const visible = showActivity ? acting() : [];   // None: no bubbles, and the pet acts out everything
     for (const s of visible) {
       const el = pill(s);
       if (!renderedIds.has(s.id)) el.classList.add('enter');
@@ -128,7 +138,8 @@
     renderedIds = new Set(visible.map((s) => s.id));
     placeBubbles();
 
-    // With bubbles hidden, a badge on the pet counts sessions that need attention.
+    // With every bubble hidden, a badge on the pet counts sessions that need attention. With only
+    // sessions' hidden there's none.
     const attention = sessions.filter((s) => ATTENTION.has(s.status)).length;
     const badge = showActivity ? 0 : attention;
     badgeEl.hidden = badge <= 0;
