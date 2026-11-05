@@ -30,6 +30,7 @@ const { defaultWorkspaceDir, ensureWorkspace, moveWorkspace, isInside } = requir
 const { ASSISTANT_ID, assistantItem, assistantLinks } = require('./assistant');
 const { TimetableNotifier, createTimetable, kstParts } = require('./timetable');
 const { formatKst } = require('./model');
+const { EtlHistory } = require('./history');
 
 const NO_TOKEN = 'eTL 토큰이 등록되지 않았습니다. 펫 트레이 메뉴의 Sources → eTL에서 토큰을 등록해 주세요.';
 const CODEX_PROMPT = '오늘 브리핑해 줘';
@@ -58,6 +59,7 @@ class EtlFeature extends EventEmitter {
     this.token = createTokenStore({ safeStorage: electron.safeStorage, file: path.join(userData, 'etl-token.bin') });
     this.stateFile = path.join(userData, 'etl-state.json');
     this.downloadsFile = path.join(userData, 'etl-downloads.json');   // files.js's own records
+    this.history = new EtlHistory({ dir: userData, log });             // etl-history.log (history.js)
     this.timetable = createTimetable({
       cacheFile: path.join(userData, 'etl-timetable.json'),
       workspaceDir: () => this.workspaceDir(),
@@ -293,12 +295,15 @@ class EtlFeature extends EventEmitter {
     this.timetableItems = [];
   }
 
-  // The tracker's bubbles, and the eTL 비서 bubble when it's turned on.
+  // The tracker's bubbles, and the eTL 비서 bubble when it's turned on. Each one is written to
+  // etl-history.log the first time it shows.
   #emitItems() {
     const extra = this.settings.get('etlAssistantBubble') === true
       ? [assistantItem({ since: this.assistantSince, codexInstalled: this.codexInstalled() })]
       : [];
-    this.emit('change', [...this.trackerItems, ...this.timetableItems, ...extra]);
+    const items = [...this.trackerItems, ...this.timetableItems, ...extra];
+    this.history.record(items);
+    this.emit('change', items);
   }
 
   async #offerAssistant() {

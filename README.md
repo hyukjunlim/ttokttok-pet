@@ -604,6 +604,11 @@ Clicking a bubble opens that eTL page in your browser; × dismisses the others f
 bubbles go away after 3 days, and at most 30 are kept. Changes made while the pet wasn't running
 show up at the next check.
 
+**History.** Each bubble is also written, the first time it shows, as one line in
+`%APPDATA%\ttokttok-pet\etl-history.log`, newest at the bottom: when it showed, its badge, title,
+details and link. Open it in any text editor to find a bubble you closed by mistake or that went
+away. Lines older than 90 days are dropped. The eTL 비서 bubble isn't written.
+
 **Chat folder.** Turning eTL on also creates a chat folder, `Documents\etl-assistant` by default
 (*채팅 폴더 위치 변경…* moves it; your `todos.md` and `timetable.md` are copied and the old folder is left
 alone). Open

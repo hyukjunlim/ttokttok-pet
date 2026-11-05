@@ -90,3 +90,19 @@ test('the 오늘 수업 bubble has its own menu item, on by default, that turns 
   f.stop();
   assert.equal(f.notifier, null);
 });
+
+test('each eTL bubble the feature shows is written once to etl-history.log in userData; the eTL 비서 bubble is not', (t) => {
+  const { f, changes } = feature(t, { etlAssistantBubble: true });
+  f.start();
+  const notice = {
+    id: 'etl:ann:300001', kind: 'etl', status: 'review', badge: '새 공지', title: '중간고사 안내',
+    project: '공학 세미나', detail: '공학 세미나 · 시험은 다음 주입니다.', url: 'https://myetl.snu.ac.kr/', since: Date.now(),
+  };
+  f.tracker.emit('change', [notice]);
+  f.tracker.emit('change', [notice]);
+  assert.deepEqual(changes.at(-1), ['etl:ann:300001', 'etl:assistant']);
+  const file = path.join(f.electron.app.getPath('userData'), 'etl-history.log');
+  const lines = fs.readFileSync(file, 'utf8').split('\n').filter(Boolean);
+  assert.equal(lines.length, 1);
+  assert.match(lines[0], /\[새 공지\] 중간고사 안내 — 공학 세미나 · 시험은 다음 주입니다\.  https:\/\/myetl\.snu\.ac\.kr\/$/);
+});
