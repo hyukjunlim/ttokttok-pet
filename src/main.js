@@ -14,6 +14,7 @@ const { Settings, DEFAULTS } = require('./settings');
 const { discoverPets, petRoots } = require('./pets');
 const { SessionTracker, defaultPaths, liveBridges } = require('./sessions');
 const { CodexTracker, codexPaths } = require('./codex');
+const { CodexAccountsFeature } = require('./codex-accounts/feature');
 const { compareSessions } = require('./transcript');
 const { timeline } = require('./timeline');
 const { combineClaudeUsage, usageView } = require('./usage');
@@ -91,6 +92,7 @@ protocol.registerSchemesAsPrivileged([
 
 let settings;
 let tracker;
+let codexAccounts = null;
 let codex = null;               // Codex threads, when Codex is installed and shown
 let etl = null;                 // SNU eTL notices, when turned on (see etl/feature.js)
 let slack = null;               // presentation reminders from a Slack canvas, when turned on (see slack/feature.js)
@@ -1112,7 +1114,7 @@ function setUsage(patch) {
 }
 
 function currentUsage() {
-  return usageView({ claude: combineClaudeUsage(usage.claude), codex: usage.codex });
+  return [...usageView({ claude: combineClaudeUsage(usage.claude), codex: codexAccounts?.count ? null : usage.codex }), ...(codexAccounts?.meter() || [])];
 }
 
 // Also runs every minute: a week can turn over, and figures can get old, with no news.
@@ -1930,6 +1932,7 @@ function buildMenu({ markAll = false } = {}) {
   const sources = sourcesMenu();
   if (sources) items.push(sources);
   if (phone) items.push(phone.menu());
+  if (codexAccounts) items.push(codexAccounts.menu());
   items.push({ type: 'separator' });
   items.push({
     label: 'Start at login',
@@ -2352,7 +2355,8 @@ if (!app.requestSingleInstanceLock()) {
 } else {
   app.on('second-instance', (_event, argv) => {
     applyLoginFlag(argv);
-    if (argv.includes('--getting-started')) gettingStarted?.open();
+    if (argv.includes('--codex-accounts')) codexAccounts?.open();
+    else if (argv.includes('--getting-started')) gettingStarted?.open();
     else if (!applyModeFlag(argv)) setVisible(true);
   });
   app.setAppUserModelId('TtokttokPet');
@@ -2451,6 +2455,8 @@ if (!app.requestSingleInstanceLock()) {
     }
     tracker.start();
     startCodex();
+    if (!DEMO) codexAccounts = new CodexAccountsFeature({ electron: { BrowserWindow, shell, dialog }, changed: () => { sendUsage(true); } });
+    if (process.argv.includes('--codex-accounts')) codexAccounts?.open();
     if (!DEMO) startEtl();
     if (!DEMO) startSlack();
     if (!DEMO) startTodomate();
@@ -2522,6 +2528,7 @@ if (!app.requestSingleInstanceLock()) {
     stepKeys?.stop();
     tracker?.stop();
     codex?.stop();
+    codexAccounts?.stop();
     etl?.stop();
     slack?.stop();
     todomate?.stop();

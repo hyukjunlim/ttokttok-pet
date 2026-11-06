@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'none'">
+<title>Codex accounts</title><link rel="stylesheet" href="codex-accounts.css"></head>
+<body><header><h1>Codex accounts</h1><p>See the remaining allowance for every connected subscription.</p></header>
+<form id="add"><label for="label">Account label</label><div class="actions"><input id="label" maxlength="80" placeholder="e.g. Personal"><button>Add account</button><button id="refresh" type="button">Refresh</button></div></form>
+<p id="error" role="alert" hidden></p><section id="signin" hidden aria-live="polite"></section><section id="apply-status" hidden aria-live="polite"></section>
+<main id="accounts" aria-label="Connected accounts"></main>
+<footer>Apply changes the saved Codex login on both WSL and micc-beta. Each account needs a one-time sign-in on each target. Existing conversations are preserved; running sessions may need reconnection.<br>Applied means both targets’ saved logins were recently verified. Dates use your local time zone.<br>The pet previews up to three current weekly readings. This list shows every connected account.</footer>
+<script src="codex-accounts.js"></script></body></html>
