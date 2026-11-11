@@ -15,6 +15,7 @@ const { discoverPets, petRoots } = require('./pets');
 const { SessionTracker, defaultPaths, liveBridges } = require('./sessions');
 const { CodexTracker, codexPaths } = require('./codex');
 const { CodexAccountsFeature } = require('./codex-accounts/feature');
+const { hidePet, showPet } = require('./pet-visibility');
 const { compareSessions } = require('./transcript');
 const { timeline } = require('./timeline');
 const { combineClaudeUsage, usageView } = require('./usage');
@@ -370,7 +371,7 @@ function createWindow() {
   });
   win.once('ready-to-show', () => {
     if (settings.get('visible') && settings.get('mode') !== 'folder') {
-      win.showInactive();
+      showPet(win);
       wake();
     }
   });
@@ -412,7 +413,7 @@ async function placeSidebar({ display = settings.get('folderDisplay'), edge = se
 function applyMode() {
   const visible = settings.get('visible');
   if (settings.get('mode') === 'folder') {
-    if (win && !win.isDestroyed()) win.hide();
+    if (win && !win.isDestroyed()) hidePet(win);
     if (visible) {
       folder.show(folderDisplay(), settings.get('folderEdge'));
       treeKey = '';
@@ -427,10 +428,10 @@ function applyMode() {
   folder.close();
   if (!win || win.isDestroyed()) return;
   if (visible) {
-    win.showInactive();
+    showPet(win);
     wake();
   } else {
-    win.hide();
+    hidePet(win);
   }
 }
 
