@@ -1,0 +1,22 @@
+:root { color-scheme: light dark; font: 14px/1.5 system-ui, sans-serif; }
+body { margin: 0; padding: 24px; background: light-dark(#faf9f6, #232321); color: light-dark(#282825, #eeede7); }
+h1 { margin: 0; font-size: 23px; } p { margin: 8px 0 16px; } header p, footer, .detail { color: light-dark(#62625a, #bbbcb1); }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+input { min-width: 120px; flex: 1; } input, button { font: inherit; padding: 7px 10px; border-radius: 6px; border: 1px solid light-dark(#bbbcb1, #65665d); }
+button { cursor: pointer; } button:disabled { cursor: default; opacity: .6; }
+.account-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.applied-badge { font-size: 12px; padding: 2px 8px; border-radius: 12px; background: light-dark(#e0e5df, #3b463e); }
+.apply-button:not(:disabled) { background: light-dark(#37654a, #8fbb9b); color: light-dark(#fff, #14251a); }
+.apply-button:disabled { background: light-dark(#e4e4e0, #44443f); color: light-dark(#66665f, #b4b4ab); border-color: light-dark(#cecec6, #5d5d56); opacity: 1; }
+.banked-resets { border-top: 1px solid light-dark(#d2d2c8, #505149); margin: 14px 0; padding-top: 10px; }
+.banked-resets h3 { font-size: 14px; margin: 0 0 5px; }
+.banked-resets summary { cursor: pointer; margin-top: 8px; }
+.reset-credit { margin-top: 10px; padding-left: 10px; border-left: 2px solid light-dark(#a5b5a9, #66806d); }
+article, #signin, #apply-status { margin-top: 16px; padding: 16px; border: 1px solid light-dark(#d2d2c8, #505149); border-radius: 10px; }
+article h2 { font-size: 16px; margin: 0; } .detail { font-size: 12px; margin: 8px 0; }
+.window { margin: 12px 0; } .window div { display: flex; justify-content: space-between; gap: 12px; }
+progress { width: 100%; height: 12px; accent-color: light-dark(#37654a, #8fbb9b); }
+footer { margin-top: 22px; padding-top: 14px; border-top: 1px solid light-dark(#d2d2c8, #505149); font-size: 12px; }
+#error { margin-top: 16px; color: light-dark(#a22424, #ffb1a8); } code { font-size: 22px; user-select: all; }
+
+#apply-status p { white-space: pre-line; }
