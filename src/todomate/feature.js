@@ -8,7 +8,12 @@
 // (schedule.js): today's timed Schedule items, and a countdown for each D-Day item. The tokens live
 // only in userData, encrypted with safeStorage (etl/token.js's store); the categories are settings.
 // Connecting takes a connection prompt from the user's PlayMCP toolbox (mcp.js). When the connection
-// stops working, one bubble says so, and clicking it connects again.
+// stops working, one bubble says so, and clicking it connects again. When PlayMCP loses TodoMate
+// from the toolbox (its own link to TodoMate broke; the pet's connection still works), another
+// bubble says so until TodoMate is back, and clicking it opens the toolbox to link it again.
+//
+// The D-Day countdowns come from the last good read, kept in memory: a day whose reads fail still
+// counts down to the dates known so far. Today's schedule needs today's read.
 
 const path = require('node:path');
 const { EventEmitter } = require('node:events');
@@ -32,6 +37,7 @@ const RETRY_MS = 5 * 60 * 1000;
 const TICK_MS = 60 * 1000;
 const MAX_TOKENS_LENGTH = 16 * 1024;
 const AUTH_ID = 'todomate:auth';
+const TOOLBOX_ID = 'todomate:toolbox';
 
 // The tokens as the store keeps them: compact JSON, printable ASCII without spaces.
 function normalizeTokens(text) {
@@ -58,13 +64,14 @@ class TodomateFeature extends EventEmitter {
       normalize: normalizeTokens,
     });
     this.client = null;
-    this.raw = null;            // { date, todos, recent, goals } from the last good check
-    this.day = null;            // { date, items } for today: raw's, in the category set now
+    this.raw = null;            // { date, todos, recent, goals } from the last good check, kept past its day
+    this.day = null;            // { date, items } for today: raw's, in the category set now, once today was read
     this.countdowns = [];       // raw's D-Day items (schedule.js countdownsOf)
     this.goals = [];            // category titles from the last check, for the menu
     this.lastChecked = 0;
     this.error = null;
     this.authFailed = false;
+    this.toolMissing = false;   // PlayMCP answers, but without TodoMate's tools
     this.loadedAt = 0;
     this.inflight = null;
     this.signingIn = null;
@@ -180,17 +187,23 @@ class TodomateFeature extends EventEmitter {
     return this.inflight;
   }
 
-  // The connection bubble asks for a new connection prompt rather than opening a page.
+  // The connection bubble asks for a new connection prompt rather than opening a page; the toolbox
+  // bubble opens the toolbox, where TodoMate is linked again.
   open(id) {
+    if (id === TOOLBOX_ID) {
+      this.electron.shell.openExternal(TOOLBOX_URL).catch((err) => this.log('todomate: could not open the toolbox:', err.message));
+      return true;
+    }
     if (id !== AUTH_ID) return false;
     this.connect();
     return true;
   }
 
   // × on a bubble, or a click on a countdown: hidden until it would have gone anyway (an item's
-  // end, the next morning). Kept in settings, so a restart doesn't bring it back.
+  // end, the next morning). Kept in settings, so a restart doesn't bring it back. The two
+  // connection bubbles stay until the connection works.
   dismiss(id) {
-    if (!String(id).startsWith('todomate:') || id === AUTH_ID) return;
+    if (!String(id).startsWith('todomate:') || id === AUTH_ID || id === TOOLBOX_ID) return;
     const shown = this.#items().find((it) => it.id === id);
     if (!shown) return;
     this.settings.set({ todomateHidden: { ...this.#hidden(), [id]: shown.expiresAt } });
@@ -240,6 +253,7 @@ class TodomateFeature extends EventEmitter {
     if (on) {
       items.push({ type: 'separator' });
       if (this.day) items.push({ label: `오늘 일정 ${this.day.items.length}개 · D-Day ${this.countdowns.length}개`, enabled: false });
+      else if (this.raw) items.push({ label: `D-Day ${this.countdowns.length}개 (마지막으로 읽은 목록)`, enabled: false });
       items.push({ label: this.#statusLine(), enabled: false });
     }
     if (this.store.has()) items.push({ type: 'separator' }, { label: '연결 해제', click: () => this.signOut() });
@@ -285,15 +299,19 @@ class TodomateFeature extends EventEmitter {
       this.goals = [...new Set(goals.values())];
       this.raw = { date, todos, recent, goals };
       this.authFailed = false;
+      this.toolMissing = false;
       this.error = null;
       this.lastChecked = this.now();
       this.#recompose();
       // Counts only, never the todos themselves: enough to tell an answer the pet can't read.
       this.log(`todomate: ${todos.length} todos today, ${recent.length} in ${LOOKBACK_DAYS} days, ${goals.size} categories, `
-        + `${this.day.items.length} timed in ${this.category()}, ${this.countdowns.length} dated in ${this.ddayCategory()}`);
+        + `${this.day?.items.length ?? 0} timed in ${this.category()}, ${this.countdowns.length} dated in ${this.ddayCategory()}`);
     } catch (err) {
       this.error = err?.message || String(err);
       if (err instanceof TodomateAuthError) this.authFailed = true;
+      // Only an answer without TodoMate's tools says the toolbox lost it; a passing error (PlayMCP's
+      // HTTP 500s come and go around it) leaves the bubble as it was.
+      if (err?.code === 'no_tool') this.toolMissing = true;
       this.client?.close();
       this.client = null;
       this.log('todomate:', this.error);
@@ -313,10 +331,12 @@ class TodomateFeature extends EventEmitter {
     return [...(await this.#between(from, mid)), ...(await this.#between(addDays(mid, 1), to))];
   }
 
-  // Today's items and the countdowns from the last check, with the categories as set now.
+  // Today's items and the countdowns from the last check, with the categories as set now. A check
+  // from an earlier day still gives the countdowns, but not today's schedule.
   #recompose() {
     if (this.raw) {
-      this.day = { date: this.raw.date, items: scheduleOf(this.raw.todos, this.raw.goals, this.category()) };
+      const today = this.raw.date === kstParts(this.now()).date;
+      this.day = today ? { date: this.raw.date, items: scheduleOf(this.raw.todos, this.raw.goals, this.category()) } : null;
       this.countdowns = countdownsOf([...this.raw.todos, ...this.raw.recent], this.raw.goals, this.ddayCategory(), this.raw.date);
     }
     this.#tick(true);
@@ -331,8 +351,9 @@ class TodomateFeature extends EventEmitter {
 
   #items() {
     if (!this.running) return [];
-    const auth = this.authFailed
-      ? [{
+    const trouble = [];
+    if (this.authFailed) {
+      trouble.push({
         id: AUTH_ID,
         kind: 'todomate',
         status: 'failed',
@@ -341,22 +362,37 @@ class TodomateFeature extends EventEmitter {
         project: '클릭하면 연결 프롬프트를 받습니다',
         detail: this.error || '',
         keepOnOpen: true,
-      }]
-      : [];
-    if (!this.day) return auth;
+      });
+    }
+    if (this.toolMissing) {
+      trouble.push({
+        id: TOOLBOX_ID,
+        kind: 'todomate',
+        status: 'failed',
+        badge: '연결 필요',
+        title: '투두메이트: PlayMCP 도구함에서 다시 연동',
+        project: '클릭하면 PlayMCP 도구함을 엽니다',
+        detail: this.error || '',
+        keepOnOpen: true,
+      });
+    }
     const hidden = this.#hidden();
-    return [...auth, ...countdownItems(this.countdowns, this.now(), hidden), ...scheduleItems(this.day, this.now(), Object.keys(hidden))];
+    return [
+      ...trouble,
+      ...countdownItems(this.countdowns, this.now(), hidden),
+      ...(this.day ? scheduleItems(this.day, this.now(), Object.keys(hidden)) : []),
+    ];
   }
 
   #tick(force = false) {
     if (!this.running) return;
     const nowMs = this.now();
-    if (this.day && this.day.date !== kstParts(nowMs).date) {   // a new day
+    if (this.day && this.day.date !== kstParts(nowMs).date) {   // a new day: read it, keeping the countdowns meanwhile
       this.day = null;
-      this.raw = null;
       this.loadedAt = 0;
     }
-    if (!this.inflight && !this.authFailed && nowMs - this.loadedAt >= (this.day ? REFRESH_MS : RETRY_MS)) this.checkNow();
+    const wait = this.day && !this.error ? REFRESH_MS : RETRY_MS;
+    if (!this.inflight && !this.authFailed && nowMs - this.loadedAt >= wait) this.checkNow();
     const list = this.#items();
     const key = JSON.stringify(list);
     if (force || key !== this.lastKey) {
@@ -378,4 +414,4 @@ class TodomateFeature extends EventEmitter {
   }
 }
 
-module.exports = { AUTH_ID, DEFAULT_CATEGORY, DEFAULT_DDAY_CATEGORY, TodomateFeature };
+module.exports = { AUTH_ID, DEFAULT_CATEGORY, DEFAULT_DDAY_CATEGORY, TOOLBOX_ID, TodomateFeature };

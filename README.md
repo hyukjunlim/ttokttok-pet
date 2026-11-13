@@ -753,9 +753,15 @@ and on *지금 확인*.
 - **D-Day:** items of the *D-Day* category that start with a date, like `11/6 저널클럽 발표`, show
   every morning from 06:00 as `D-3 11/6(금) 저널클럽 발표` until that day ends. The pet looks for
   them on today and the 29 days before, since an item stays on the day it was written. Clicking
-  one clears it until the next morning.
-- **연결 필요** appears when PlayMCP stops accepting the connection. Clicking it asks for a new
-  connection prompt.
+  one clears it until the next morning. On a day whose reads fail, the countdowns go on from the
+  last read that worked; that list is kept only in memory while the pet runs, so after a restart
+  there are none until a read works. Today's schedule needs that day's read.
+- **연결 필요** appears when PlayMCP stops accepting the pet's own connection. Clicking it asks for
+  a new connection prompt.
+- **연결 필요** also appears, as soon as a read finds it, when PlayMCP answers but its toolbox no
+  longer has TodoMate (PlayMCP lost its own link to TodoMate). Clicking it opens
+  https://playmcp.kakao.com/toolbox, where you link TodoMate again. A passing HTTP 500 doesn't
+  bring it up, × doesn't close it, and it goes once a read works again. It isn't sent to the phone.
 
 *카테고리* and *D-Day 카테고리* in the menu pick other categories. The phone gets each D-Day
 countdown at 06:00 and each schedule item 15 minutes before it starts.
