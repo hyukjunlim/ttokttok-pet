@@ -71,10 +71,11 @@ Hard constraints for Ttokttok Pet. Change them only with the owner's approval.
   and the weekly limits. It never chats.
 - Pushes when a session turns Ready, Needs you or Error; when a new eTL bubble appears (마감 임박,
   마감 변경, 새 과제, 성적, 새 공지, 토큰 만료); each morning from 06:00, for each Slack
-  presentation's D-X reminder and each TodoMate D-Day countdown; when Slack's 순서 변경 appears; and
-  15 minutes before each TodoMate schedule item starts. Running and today's classes don't push.
-  Each session status and each source (eTL, Slack, TodoMate) can be turned off under tray menu →
-  Phone → Notifications; all are on by default.
+  presentation's D-X reminder, each TodoMate D-Day countdown and each account's rate-limit reset
+  D-Day; when Slack's 순서 변경 appears; and 15 minutes before each TodoMate schedule item starts.
+  Running and today's classes don't push. Each session status and each source (eTL, Slack,
+  TodoMate, rate-limit resets) can be turned off under tray menu → Phone → Notifications; all are
+  on by default.
 - An eTL notice opens in the LearningX Student app where the phone allows it, otherwise on the web.
 - Works only while the PC is on and awake; the phone never checks eTL or reads sessions itself.
 - Out of scope: replying from the phone, the animated pet on the phone, any server run by the
@@ -103,6 +104,14 @@ Hard constraints for Ttokttok Pet. Change them only with the owner's approval.
   next morning.
 - Pushes to the phone as the Phone companion section says.
 - Works only while the PC is on and awake.
+
+## Rate-limit resets
+- Claude's resets are entered by hand only, in the Accounts window's Claude tab. The pet never
+  fetches them from Anthropic and never sends Claude Code's client identity.
+- Codex's come only from the reading the Accounts window already makes of each connected account.
+- Every morning from 06:00, one `D-X` bubble per account that holds resets, for its
+  soonest-expiring one. Clicking one clears it until the next morning.
+- The pet never uses or claims a reset.
 
 ## Personal data
 - The repository never holds real personal data, the user's or anyone else's: no names, account,

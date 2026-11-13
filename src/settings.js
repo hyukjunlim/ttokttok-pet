@@ -18,7 +18,7 @@ const DEFAULTS = {
   visible: true,
   position: null,          // top-left of the pet sprite, in screen DIPs
   showActivity: true,      // the floating pet's bubbles (tray menu → Appearance → Bubbles); off: None
-  showSessionBubbles: true, // ... sessions' too (Claude, Codex, web chats); off: eTL's, Slack's and TodoMate's only, no badge
+  showSessionBubbles: true, // ... sessions' too (Claude, Codex, web chats); off: the notices only (eTL, Slack, TodoMate, resets), no badge
   alwaysAnimate: true,     // animate even when Windows' Animation effects are off
   showUsage: true,         // the weekly-limit meter next to the pet
   claudeUsageOverSsh: true,  // read Claude's usage from the mod on SSH hosts
@@ -42,11 +42,13 @@ const DEFAULTS = {
   todomateCategory: null,  // ... that category's title; null: Schedule
   todomateDdayCategory: null, // ... and the one whose dated items count down; null: D-Day
   todomateHidden: {},      // ... bubble id -> until when it stays hidden (×, or a click on a countdown)
+  claudeResets: [],        // Claude's rate-limit resets, entered in the Accounts window: [{ id, kind, count, date, time }]
+  resetsHidden: {},        // ... the resets' D-Day bubble id -> until when it stays hidden (a click or ×)
   webChats: false,         // claude.ai and ChatGPT chats, from the browser extension
   phone: false,            // the sidebar on your phone, with notifications (phone/feature.js)
   phonePort: null,         // ... the local port it serves on; null: 47823
   phoneSessionPush: { review: true, waiting: true, failed: true },  // ... which session statuses notify (Ready, Needs you, Error)
-  phoneNoticePush: { etl: true, slack: true, todomate: true },      // ... and which notices (phone/notify.js)
+  phoneNoticePush: { etl: true, slack: true, todomate: true, resets: true },  // ... and which notices (phone/notify.js)
   shortcut: 'CommandOrControl+Alt+P',
   dismissed: {},
   readyFrom: null,         // when opening a session stopped counting as done with it (main.js)

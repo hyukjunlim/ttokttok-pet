@@ -403,9 +403,9 @@ test('statuses turned off under Session notifications don\'t buzz; eTL notices a
   const checks = () => f.menu().submenu.find((i) => i.label === 'Notifications').submenu.filter((i) => i.type === 'checkbox');
   const sub = f.menu().submenu.find((i) => i.label === 'Notifications');
   assert.equal(sub.enabled, true);
-  assert.deepEqual(checks().map((i) => i.checked), [true, true, true, true, true, true]);
+  assert.deepEqual(checks().map((i) => i.checked), [true, true, true, true, true, true, true]);
   checks()[0].click({ checked: false });
-  assert.deepEqual(checks().map((i) => i.checked), [false, true, true, true, true, true]);
+  assert.deepEqual(checks().map((i) => i.checked), [false, true, true, true, true, true, true]);
 
   f.observe([{ id: 'cli:a', kind: 'cli', status: 'running', since: 1, title: 'A' }, { id: 'cli:b', kind: 'cli', status: 'running', since: 1, title: 'B' }]);
   f.observe([
@@ -423,7 +423,7 @@ test('statuses turned off under Session notifications don\'t buzz; eTL notices a
   assert.equal(push.sent.length, 2);
 });
 
-test('eTL, Slack and TodoMate notices each turn off on their own, and the list is looked at every minute', async (t) => {
+test('eTL, Slack, TodoMate and reset notices each turn off on their own, and the list is looked at every minute', async (t) => {
   const { f, push, port } = await running(t);
   const origin = `http://127.0.0.1:${port}`;
   const code = f.newCode();
@@ -431,12 +431,14 @@ test('eTL, Slack and TodoMate notices each turn off on their own, and the list i
   const phone = phoneSubscription();
   await call(port, { method: 'POST', path: '/api/push', origin, cookie, body: { subscription: phone.sub } });
 
-  const todomate = f.menu().submenu.find((i) => i.label === 'Notifications').submenu.find((i) => i.label?.startsWith('투두메이트'));
-  todomate.click({ checked: false });
+  const notifications = () => f.menu().submenu.find((i) => i.label === 'Notifications').submenu;
+  notifications().find((i) => i.label?.startsWith('투두메이트')).click({ checked: false });
+  notifications().find((i) => i.label?.startsWith('Rate-limit resets')).click({ checked: false });
   f.observe([]);
   assert.ok(f.clock, 'a clock while the companion runs');
   f.observe([
     { id: 'todomate:dday:2026-11-06:t1:2026-11-03', kind: 'todomate', status: 'review', badge: 'D-3', title: '저널클럽 발표' },
+    { id: 'resets:dday:claude:2026-11-03', kind: 'resets', app: 'claude', status: 'review', badge: 'D-3', title: 'Claude · Weekly reset', project: '11/6(금)까지' },
     { id: 'slack:daily:2026-12-22:긴 발표:2026-11-03', kind: 'slack', status: 'idle', badge: 'D-49', title: '긴 발표' },
     { id: 'etl:new:7', kind: 'etl', badge: '새 과제', title: 'HW3' },
   ]);

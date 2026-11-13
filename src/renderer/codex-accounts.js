@@ -9,15 +9,17 @@
   let latest;
   const drafts = new Map();
   const el = (tag, text, cls) => { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; };
-  async function act(action, data) {
-    if (busy) return;
+  // `shown`: where an error goes (the Claude tab has its own). Resolves true when it went through.
+  async function act(action, data, shown = error) {
+    if (busy) return false;
     busy = true;
-    error.hidden = true;
+    shown.hidden = true;
     try {
       const result = await api.act(action, data);
-      if (result.error) { error.textContent = result.error; error.hidden = false; }
+      if (result.error) { shown.textContent = result.error; shown.hidden = false; }
       if (result.state) render(result.state);
-    } catch { error.textContent = 'Could not contact the account monitor.'; error.hidden = false; }
+      return !result.error;
+    } catch { shown.textContent = 'Could not contact the account monitor.'; shown.hidden = false; return false; }
     finally { busy = false; }
   }
   const button = (text, action, data) => { const b = el('button', text); b.type = 'button'; b.addEventListener('click', () => act(action, data)); return b; };
@@ -57,9 +59,99 @@
     if (minutes % 60 === 0) return `${minutes / 60}-hour limit`;
     return `${minutes}-minute limit`;
   }
+  // ---------------------------------------------------------- tabs
+
+  const tabs = [...document.querySelectorAll('[role="tab"]')];
+  function select(tab, focus = false) {
+    for (const t of tabs) {
+      const on = t === tab;
+      t.setAttribute('aria-selected', String(on));
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+    }
+    if (focus) tab.focus();
+    try { localStorage.setItem('accountsTab', tab.id); } catch { /* not kept */ }
+  }
+  for (const [i, tab] of tabs.entries()) {
+    tab.addEventListener('click', () => select(tab));
+    tab.addEventListener('keydown', (e) => {
+      const step = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+      if (step) { e.preventDefault(); select(tabs[(i + step + tabs.length) % tabs.length], true); }
+    });
+  }
+  try { const saved = document.getElementById(localStorage.getItem('accountsTab') || ''); if (tabs.includes(saved)) select(saved); } catch { /* the first tab */ }
+
+  // ---------------------------------------------------------- Claude's resets, entered by hand
+
+  const claudeForm = document.getElementById('claude-form');
+  const claudeError = document.getElementById('claude-error');
+  const claudeBox = document.getElementById('claude-resets');
+  const fields = { kind: document.getElementById('claude-kind'), count: document.getElementById('claude-count'),
+    date: document.getElementById('claude-date'), time: document.getElementById('claude-time') };
+  const saveButton = document.getElementById('claude-save');
+  const cancelButton = document.getElementById('claude-cancel');
+  let editing = null;
+  function editMode(entry) {
+    editing = entry?.id ?? null;
+    fields.kind.value = entry?.kind ?? '';
+    fields.count.value = String(entry?.count ?? 1);
+    fields.date.value = entry?.date ?? '';
+    fields.time.value = entry?.time ?? '';
+    saveButton.textContent = editing ? 'Save changes' : 'Add reset';
+    cancelButton.hidden = !editing;
+    if (editing) fields.kind.focus();
+  }
+  claudeForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const data = { kind: fields.kind.value, count: Number(fields.count.value), date: fields.date.value, time: fields.time.value || null };
+    if (await act(editing ? 'claude-edit' : 'claude-add', editing ? { id: editing, ...data } : data, claudeError)) editMode(null);
+  });
+  cancelButton.addEventListener('click', () => editMode(null));
+  // '2026-11-16' in the system's format, with its weekday: the date as entered (no time zone to convert).
+  const dayOf = (date) => new Date(`${date}T00:00:00Z`).toLocaleDateString(undefined, { timeZone: 'UTC', weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  function renderClaude(entries = []) {
+    if (editing && !entries.some((e) => e.id === editing)) editMode(null);
+    const kinds = document.getElementById('claude-kinds');
+    const known = [...new Set(entries.map((e) => e.kind))];   // the kinds entered before, as suggestions
+    if (known.join('\n') !== [...kinds.options].map((o) => o.value).join('\n')) {
+      kinds.replaceChildren(...known.map((k) => { const o = el('option'); o.value = k; return o; }));
+    }
+    claudeBox.replaceChildren();
+    if (!entries.length) { claudeBox.append(el('p', 'No Claude resets entered.', 'detail')); return; }
+    for (const entry of entries) {
+      const card = el('article', null, entry.expired ? 'expired' : null);
+      const heading = el('div', null, 'account-heading');
+      heading.append(el('h2', `${entry.kind}${entry.count > 1 ? ` × ${entry.count}` : ''}`));
+      if (entry.dday) heading.append(el('span', entry.dday, 'applied-badge'));
+      card.append(heading);
+      const until = `${dayOf(entry.date)}${entry.time ? ` ${entry.time}` : ', end of day'} (KST)`;
+      card.append(el('p', entry.expired ? `Expired: ${until}` : `Expires: ${until}`, 'detail'));
+      const actions = el('div', null, 'actions');
+      if (!entry.expired) {
+        const used = el('button', entry.count > 1 ? 'Used one' : 'Used it');
+        used.type = 'button';
+        used.title = entry.count > 1 ? `One fewer: ${entry.count - 1} left.` : 'Removes this entry.';
+        used.addEventListener('click', () => act('claude-use', { id: entry.id }, claudeError));
+        const edit = el('button', 'Edit');
+        edit.type = 'button';
+        edit.addEventListener('click', () => editMode(entry));
+        actions.append(used, edit);
+      }
+      const remove = el('button', 'Delete');
+      remove.type = 'button';
+      remove.addEventListener('click', () => act('claude-remove', { id: entry.id }, claudeError));
+      actions.append(remove);
+      card.append(actions);
+      claudeBox.append(card);
+    }
+  }
+
+  // ---------------------------------------------------------- Codex
+
   function render(state) {
     if (!state) return;
     latest = state;
+    renderClaude(state.claudeResets);
     document.getElementById('refresh').disabled = state.refreshing;
     document.querySelector('#add button').disabled = Boolean(state.pending);
     if (state.error) { error.textContent = state.error; error.hidden = false; }

@@ -457,6 +457,21 @@ turn on the phone companion).
   pet uses the newest reply it can see, on this PC or on an SSH host. After the reset time
   passes, the meter shows 0% until the next reply.
 
+## Rate-limit resets
+
+Tray menu → *Accounts…* has two tabs. *Codex* shows each connected account's usage and its banked
+resets, read together with its usage. *Claude* is where you enter Claude's resets yourself: the
+kind, how many, the expiry date (KST) and, if you know it, the time.
+
+Every morning from 06:00, the pet shows a D-X bubble for each account that holds resets, for the
+one that expires first, with when it expires and how many more the account holds:
+`D-3 Codex 홍길동 · Weekly reset` over `11/16(월) 15:00 만료 · 외 1개`. When that reset is used or
+expires, the bubble moves on to the next one. Clicking it clears it until the next morning. The
+same notice goes to the phone, with its own switch under tray menu → *Phone* → *Notifications*.
+Accounts whose monitoring is paused, and resets without an expiry date, are left out.
+
+Claude's entries are kept only in the pet's settings; the pet never contacts Claude for them.
+
 ## Phone
 
 The phone companion puts what the sidebar shows on your phone (Android, or an iPhone with iOS
@@ -500,8 +515,9 @@ watching and the phone only shows what the pet sends it, so the PC has to be on 
   falls back to the web page.)
 - **Notifications:** when a session turns *Ready*, *Needs you* or *Error*; when a new eTL bubble
   comes: 마감 임박, 마감 변경, 새 과제, 성적, 새 공지 (보강 공지, 휴강 공지) and 토큰 만료; every
-  morning at 06:00, for each Slack presentation's D-X and each TodoMate D-Day countdown; when
-  Slack's 순서 변경 comes; and 15 minutes before each TodoMate schedule item starts. Tray menu →
+  morning at 06:00, for each Slack presentation's D-X, each TodoMate D-Day countdown and each
+  account's [rate-limit reset](#rate-limit-resets) D-Day; when Slack's 순서 변경 comes; and 15
+  minutes before each TodoMate schedule item starts. Tray menu →
   *Phone* → *Notifications* turns each session status and each source off on its own.
   *Running*, today's classes and sessions hidden from the sidebar don't notify, and neither does
   what's already showing when the companion starts. Tapping one opens a small page about it with

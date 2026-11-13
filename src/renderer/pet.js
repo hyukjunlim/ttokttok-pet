@@ -18,7 +18,7 @@
   const LABELS = { waiting: 'Needs you', failed: 'Error', review: 'Ready', running: 'Running', background: 'Background' };
   const BUSY = new Set(['running', 'background']);   // still going: nothing to dismiss
   const ATTENTION = new Set(['waiting', 'failed', 'review']);
-  const NOTICES = new Set(['etl', 'slack', 'todomate', 'practice']);   // bubbles that aren't sessions
+  const NOTICES = new Set(['etl', 'slack', 'todomate', 'resets', 'practice']);   // bubbles that aren't sessions
   const ETL_LINK = /^https:\/\/myetl\.snu\.ac\.kr\//;
   const SHADOW_ROOM = 16;          // px kept around the bubbles so their shadows aren't cut off
 
@@ -156,10 +156,11 @@
     const etl = s.kind === 'etl';
     const slack = s.kind === 'slack';    // a presentation reminder from a Slack canvas
     const todomate = s.kind === 'todomate';   // an item of today's TodoMate schedule
+    const resets = s.kind === 'resets';       // an account's rate-limit reset, counting down; its title names the app
     const web = s.kind === 'web';        // a claude.ai, ChatGPT or Gemini chat in the browser
     const cli = s.kind === 'cli';        // Claude Code in VS Code or a terminal
     const client = s.client === 'vscode' ? 'VS Code' : 'Terminal';   // ... and Codex's chats there
-    const source = web ? s.siteName || s.site : etl ? 'eTL' : slack ? 'Slack' : todomate ? 'TodoMate' : codex ? (s.client ? `Codex · ${client}` : 'Codex')
+    const source = web ? s.siteName || s.site : etl ? 'eTL' : slack ? 'Slack' : todomate ? 'TodoMate' : resets ? '' : codex ? (s.client ? `Codex · ${client}` : 'Codex')
       : s.kind === 'practice' ? 'Ttokttok Pet' : cli ? client : 'Claude';
     // No hover tooltip (it pops up over the other bubbles); screen readers still get the details.
     const where = s.remote ? (codex ? `on ${s.remote}` : `SSH · ${s.remote}`) : '';

@@ -242,9 +242,12 @@ function countdownItems(list, nowMs, hidden = {}) {
 module.exports = {
   DEFAULT_MINUTES,
   SHOW_FROM_HOUR,
+  addDays,
   countdownDay,
   countdownItems,
   countdownsOf,
+  daysBetween,
+  dLabel,
   goalsOf,
   kstParts,
   parseDated,
@@ -252,4 +255,5 @@ module.exports = {
   scheduleItems,
   scheduleOf,
   todosOf,
+  weekdayOf,
 };

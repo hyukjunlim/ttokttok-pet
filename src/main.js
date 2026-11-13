@@ -117,6 +117,7 @@ let codexSessions = [];
 let etlSessions = [];
 let slackSessions = [];
 let todomateSessions = [];
+let resetSessions = [];         // a D-Day bubble for each account's soonest-expiring rate-limit reset (codex-accounts/resets.js)
 let webSessions = [];
 let folder = null;              // folder mode's sidebar (see folder-mode.js)
 let stepKeys = null;            // Ctrl+Tab through the sidebar (see step-keys.js)
@@ -540,13 +541,13 @@ function sendSessions() {
   if (tray) tray.setToolTip(trayTooltip());
 }
 
-// eTL's, Slack's and TodoMate's bubbles, today's classes and schedule in one timeline.
+// eTL's, Slack's, TodoMate's and the resets' bubbles, today's classes and schedule in one timeline.
 function currentNotices() {
-  return timeline([...etlSessions, ...slackSessions, ...todomateSessions]);
+  return timeline([...etlSessions, ...slackSessions, ...todomateSessions, ...resetSessions]);
 }
 
 function mergeSessions() {
-  sessions = timeline([...claudeSessions, ...codexSessions, ...etlSessions, ...slackSessions, ...todomateSessions, ...webSessions]).filter((s) => !isDeleted(s.id)).sort(compareSessions);
+  sessions = timeline([...claudeSessions, ...codexSessions, ...etlSessions, ...slackSessions, ...todomateSessions, ...resetSessions, ...webSessions]).filter((s) => !isDeleted(s.id)).sort(compareSessions);
   sendSessions();
   phone?.changed();
   phone?.observe(sessions, currentHidden());
@@ -1103,6 +1104,7 @@ function trackerFor(id) {
   if (String(id).startsWith('etl:')) return etl;
   if (String(id).startsWith('slack:')) return slack;
   if (String(id).startsWith('todomate:')) return todomate;
+  if (String(id).startsWith('resets:')) return codexAccounts?.reminders;
   if (String(id).startsWith('web:')) return webchats;
   return String(id).startsWith('codex:') ? codex : tracker;
 }
@@ -1599,7 +1601,7 @@ function openSession(id, { handoff = true, fill = false } = {}) {
   if (s?.kind === 'etl' && s.assistant) return Boolean(etl?.openAssistant(open));   // the eTL chat
   if (s?.kind === 'web') return openWebChat(s, { handoff });
   if (s?.kind === 'todomate' && todomate?.open(id)) return true;   // its connection bubble
-  if (s?.clearOnClick) {   // a D-X countdown (Slack's, TodoMate's): seen, so it goes until tomorrow
+  if (s?.clearOnClick) {   // a D-X countdown (Slack's, TodoMate's, a reset's): seen, so it goes until tomorrow
     trackerFor(s.id)?.dismiss(s.id);
     return true;
   }
@@ -2038,7 +2040,7 @@ function appearanceMenu(folderMode) {
       label: 'Bubbles',
       submenu: [
         bubbles('all', 'All', { showActivity: true, showSessionBubbles: true }),
-        bubbles('notices', 'eTL, Slack and TodoMate only (no sessions)', { showActivity: true, showSessionBubbles: false }),
+        bubbles('notices', 'eTL, Slack, TodoMate and resets only (no sessions)', { showActivity: true, showSessionBubbles: false }),
         bubbles('none', 'None (a badge counts what needs you)', { showActivity: false }),
       ],
     });
@@ -2456,7 +2458,17 @@ if (!app.requestSingleInstanceLock()) {
     }
     tracker.start();
     startCodex();
-    if (!DEMO) codexAccounts = new CodexAccountsFeature({ electron: { BrowserWindow, shell, dialog }, changed: () => { sendUsage(true); } });
+    if (!DEMO) {
+      codexAccounts = new CodexAccountsFeature({
+        electron: { BrowserWindow, shell, dialog },
+        settings,
+        changed: () => { sendUsage(true); },
+        notices: (list) => {
+          resetSessions = list;
+          mergeSessions();
+        },
+      });
+    }
     if (process.argv.includes('--codex-accounts')) codexAccounts?.open();
     if (!DEMO) startEtl();
     if (!DEMO) startSlack();

@@ -12,6 +12,8 @@ const ETL_HOME = 'https://myetl.snu.ac.kr/';
 const ETL_LINK = /^https:\/\/myetl\.snu\.ac\.kr\//;
 const SLACK_LINK = /^https:\/\/[a-z0-9-]+\.(enterprise\.)?slack\.com\/docs\//;
 const TODOMATE_HOME = 'https://www.todomate.net/';
+const CLAUDE_USAGE = 'https://claude.ai/settings/usage';
+const CODEX_HOME = 'https://chatgpt.com/codex';
 const CLAUDE_SESSION = /^https:\/\/claude\.ai\/code\/session_[A-Za-z0-9]{8,64}$/;
 const OWN_LINK = {
   claude: CLAUDE_SESSION,
@@ -36,9 +38,11 @@ const OPEN = {
 };
 
 // An eTL notice opens in LearningX; a Slack reminder at its canvas in Slack, or nowhere without one;
-// a TodoMate schedule item in TodoMate.
+// a TodoMate schedule item in TodoMate; a reset's D-Day in Claude at its usage page, or in ChatGPT's
+// Codex.
 function noticeOpen(s) {
   if (s.kind === 'todomate') return { app: 'todomate', url: TODOMATE_HOME };
+  if (s.kind === 'resets') return s.app === 'claude' ? { app: 'claude', url: CLAUDE_USAGE } : { app: 'chatgpt', url: CODEX_HOME };
   if (s.kind === 'slack') return { app: 'slack', url: SLACK_LINK.test(s.url || '') ? s.url : null };
   return { app: 'learningx', url: ETL_LINK.test(s.url || '') ? s.url : ETL_HOME };
 }
@@ -78,8 +82,8 @@ function folderOf(n, linkOf) {
   };
 }
 
-// `hosts`: buildTree's. `notices`: the eTL, Slack and TodoMate items (etl/feature.js,
-// slack/feature.js, todomate/feature.js).
+// `hosts`: buildTree's. `notices`: the eTL, Slack, TodoMate and reset items (etl/feature.js,
+// slack/feature.js, todomate/feature.js, codex-accounts/resets.js).
 // `usage`: usageView's.
 // `linkOf(id)`: a session's own address: a web chat's, if a tab shows it, or a Claude session's
 // Remote Control session.

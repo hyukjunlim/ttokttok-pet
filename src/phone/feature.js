@@ -436,6 +436,7 @@ class PhoneFeature extends EventEmitter {
       item('phoneNoticePush', 'etl', 'eTL: new notices, assignments, grades, 마감 임박'),
       item('phoneNoticePush', 'slack', 'Slack 발표: D-Day every day at 06:00, 순서 변경'),
       item('phoneNoticePush', 'todomate', '투두메이트: D-Day at 06:00, schedule 15 min before'),
+      item('phoneNoticePush', 'resets', 'Rate-limit resets: D-Day at 06:00 for each Codex and Claude account'),
     ];
   }
 
