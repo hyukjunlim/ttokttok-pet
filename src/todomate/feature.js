@@ -12,8 +12,8 @@
 // from the toolbox (its own link to TodoMate broke; the pet's connection still works), another
 // bubble says so until TodoMate is back, and clicking it opens the toolbox to link it again.
 //
-// The D-Day countdowns come from the last good read, kept in memory: a day whose reads fail still
-// counts down to the dates known so far. Today's schedule needs today's read.
+// D-Day countdowns are saved in local settings by category and name. Missing items stay until
+// their dates pass; later reads update matching names. Today's schedule needs today's read.
 
 const path = require('node:path');
 const { EventEmitter } = require('node:events');
@@ -38,6 +38,7 @@ const TICK_MS = 60 * 1000;
 const MAX_TOKENS_LENGTH = 16 * 1024;
 const AUTH_ID = 'todomate:auth';
 const TOOLBOX_ID = 'todomate:toolbox';
+const nameKey = (s) => String(s ?? '').toLowerCase().replace(/\s+/g, '');
 
 // The tokens as the store keeps them: compact JSON, printable ASCII without spaces.
 function normalizeTokens(text) {
@@ -66,7 +67,7 @@ class TodomateFeature extends EventEmitter {
     this.client = null;
     this.raw = null;            // { date, todos, recent, goals } from the last good check, kept past its day
     this.day = null;            // { date, items } for today: raw's, in the category set now, once today was read
-    this.countdowns = [];       // raw's D-Day items (schedule.js countdownsOf)
+    this.countdowns = [];       // saved D-Day items, updated by successful reads
     this.goals = [];            // category titles from the last check, for the menu
     this.lastChecked = 0;
     this.error = null;
@@ -200,13 +201,17 @@ class TodomateFeature extends EventEmitter {
   }
 
   // × on a bubble, or a click on a countdown: hidden until it would have gone anyway (an item's
-  // end, the next morning). Kept in settings, so a restart doesn't bring it back. The two
-  // connection bubbles stay until the connection works.
+  // end, the next morning). Connection notices stay hidden until a successful read.
+  // Kept in settings, so a restart doesn't bring them back.
   dismiss(id) {
-    if (!String(id).startsWith('todomate:') || id === AUTH_ID || id === TOOLBOX_ID) return;
+    if (!String(id).startsWith('todomate:')) return;
     const shown = this.#items().find((it) => it.id === id);
     if (!shown) return;
-    this.settings.set({ todomateHidden: { ...this.#hidden(), [id]: shown.expiresAt } });
+    if (id === AUTH_ID || id === TOOLBOX_ID) {
+      this.settings.set({ todomateConnectionHidden: { ...this.settings.get('todomateConnectionHidden'), [id]: true } });
+    } else {
+      this.settings.set({ todomateHidden: { ...this.#hidden(), [id]: shown.expiresAt } });
+    }
     this.#tick(true);
   }
 
@@ -253,7 +258,7 @@ class TodomateFeature extends EventEmitter {
     if (on) {
       items.push({ type: 'separator' });
       if (this.day) items.push({ label: `오늘 일정 ${this.day.items.length}개 · D-Day ${this.countdowns.length}개`, enabled: false });
-      else if (this.raw) items.push({ label: `D-Day ${this.countdowns.length}개 (마지막으로 읽은 목록)`, enabled: false });
+      else if (this.countdowns.length) items.push({ label: `D-Day ${this.countdowns.length}개 (마지막으로 읽은 목록)`, enabled: false });
       items.push({ label: this.#statusLine(), enabled: false });
     }
     if (this.store.has()) items.push({ type: 'separator' }, { label: '연결 해제', click: () => this.signOut() });
@@ -274,9 +279,11 @@ class TodomateFeature extends EventEmitter {
   #run() {
     if (this.running) return;
     this.running = true;
+    this.countdowns = this.#savedCountdowns();
     this.interval = this.timers.setInterval(() => this.#tick(), TICK_MS);
     this.electron.powerMonitor.on('resume', this.onResume);
     this.checkNow();
+    this.#tick(true);   // show saved dates immediately, even while the first request is pending
   }
 
   async #load() {
@@ -302,6 +309,7 @@ class TodomateFeature extends EventEmitter {
       this.toolMissing = false;
       this.error = null;
       this.lastChecked = this.now();
+      this.settings.set({ todomateConnectionHidden: {} });
       this.#recompose();
       // Counts only, never the todos themselves: enough to tell an answer the pet can't read.
       this.log(`todomate: ${todos.length} todos today, ${recent.length} in ${LOOKBACK_DAYS} days, ${goals.size} categories, `
@@ -331,14 +339,41 @@ class TodomateFeature extends EventEmitter {
     return [...(await this.#between(from, mid)), ...(await this.#between(addDays(mid, 1), to))];
   }
 
-  // Today's items and the countdowns from the last check, with the categories as set now. A check
-  // from an earlier day still gives the countdowns, but not today's schedule.
+  #savedCountdowns() {
+    const saved = this.settings.get('todomateCountdowns')?.[nameKey(this.ddayCategory())];
+    const today = kstParts(this.now()).date;
+    return (Array.isArray(saved) ? saved : []).filter((c) => {
+      if (!c || typeof c.title !== 'string' || !c.title.trim()
+        || (c.id != null && typeof c.id !== 'string') || !/^\d{4}-\d{2}-\d{2}$/.test(c.date)) return false;
+      const ms = Date.parse(`${c.date}T00:00:00Z`);
+      return Number.isFinite(ms) && new Date(ms).toISOString().slice(0, 10) === c.date && c.date >= today;
+    });
+  }
+
+  // Merge by name, retaining dates absent from a later read (including the 30-day lookback).
+  // Categories keep separate saved lists so switching categories doesn't mix reminders.
   #recompose() {
+    const byName = new Map(this.#savedCountdowns().map((c) => [nameKey(c.title), c]));
     if (this.raw) {
       const today = this.raw.date === kstParts(this.now()).date;
       this.day = today ? { date: this.raw.date, items: scheduleOf(this.raw.todos, this.raw.goals, this.category()) } : null;
-      this.countdowns = countdownsOf([...this.raw.todos, ...this.raw.recent], this.raw.goals, this.ddayCategory(), this.raw.date);
+      const todos = [
+        ...this.raw.todos.map((t) => ({ ...t, sourceDate: this.raw.date })),
+        ...this.raw.recent.slice().reverse(),
+      ];
+      for (const c of countdownsOf(todos, this.raw.goals, this.ddayCategory(), this.raw.date, true)) {
+        const key = nameKey(c.title);
+        const previous = byName.get(key);
+        // Keep a bubble's identity when only the source todo id changes, so × still holds.
+        byName.set(key, { ...c, id: previous?.id ?? c.id });
+      }
     }
+    const today = kstParts(this.now()).date;
+    this.countdowns = [...byName.values()].filter((c) => c.date >= today)
+      .sort((a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title));
+    this.settings.set({ todomateCountdowns: {
+      ...this.settings.get('todomateCountdowns'), [nameKey(this.ddayCategory())]: this.countdowns,
+    } });
     this.#tick(true);
   }
 
@@ -378,7 +413,7 @@ class TodomateFeature extends EventEmitter {
     }
     const hidden = this.#hidden();
     return [
-      ...trouble,
+      ...trouble.filter((b) => this.settings.get('todomateConnectionHidden')?.[b.id] !== true),
       ...countdownItems(this.countdowns, this.now(), hidden),
       ...(this.day ? scheduleItems(this.day, this.now(), Object.keys(hidden)) : []),
     ];

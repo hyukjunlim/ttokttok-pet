@@ -42,6 +42,8 @@ const DEFAULTS = {
   todomateCategory: null,  // ... that category's title; null: Schedule
   todomateDdayCategory: null, // ... and the one whose dated items count down; null: D-Day
   todomateHidden: {},      // ... bubble id -> until when it stays hidden (×, or a click on a countdown)
+  todomateConnectionHidden: {}, // ... connection notices dismissed until the next successful read
+  todomateCountdowns: {},  // ... category -> saved D-Day dates and titles, retained while disconnected
   claudeResets: [],        // Claude's rate-limit resets, entered in the Accounts window: [{ id, kind, count, date, time }]
   resetsHidden: {},        // ... the resets' D-Day bubble id -> until when it stays hidden (a click or ×)
   webChats: false,         // claude.ai and ChatGPT chats, from the browser extension

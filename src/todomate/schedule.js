@@ -77,7 +77,10 @@ function todosOf(payload) {
     const id = str(String(first(o, ['id', 'todo_id', 'todoId', 'todoID']) ?? '')) ?? null;
     const goalId = first(o, ['goal_id', 'goalId', 'goalID']);
     const done = first(o, ['is_done', 'isDone', 'done', 'completed']);
-    out.push({ id, content, goalId: goalId == null ? null : String(goalId), goalTitle: goalTitleOf(o), done: done === true });
+    const todo = { id, content, goalId: goalId == null ? null : String(goalId), goalTitle: goalTitleOf(o), done: done === true };
+    // The day the todo belongs to decides between old and newly posted dates with the same name.
+    if (/^\d{4}-\d{2}-\d{2}$/.test(o.formattedDate)) todo.sourceDate = o.formattedDate;
+    out.push(todo);
   });
   return out;
 }
@@ -179,7 +182,7 @@ function countdownDay(nowMs) {
 
 // '11/6 저널클럽 발표' on 2026-11-03 -> { date: '2026-11-06', title: '저널클럽 발표' }, or null
 // for text without a date in front, or a date that has passed.
-function parseDated(text, today) {
+function parseDated(text, today, includePast = false) {
   const m = DATED_RE.exec(String(text ?? ''));
   if (!m) return null;
   const year = Number(today.slice(0, 4));
@@ -188,23 +191,28 @@ function parseDated(text, today) {
   let date = on(year);
   if (!valid(date)) return null;
   if (date < today) {
-    if (daysBetween(date, today) < PAST_DAYS) return null;
-    date = on(year + 1);
+    if (daysBetween(date, today) < PAST_DAYS) {
+      if (!includePast) return null;
+    } else date = on(year + 1);
     if (!valid(date)) return null;
   }
   return { date, title: m[3].replace(/\s+/g, ' ').trim() };
 }
 
-// The countdowns in `category`, one per date and title, soonest first: [{ id, date, title }].
-function countdownsOf(todos, goals, category, today) {
+// The countdowns in `category`, one per name, soonest first: [{ id, date, title }].
+// Newer todo days take precedence. Without source dates, the caller's first occurrence wins.
+// includePast lets the persistent cache replace a future date that was moved into the past.
+function countdownsOf(todos, goals, category, today, includePast = false) {
   const want = squash(category);
   const seen = new Set();
   const out = [];
-  for (const t of todos) {
+  const newest = [...todos].sort((a, b) => (b.sourceDate || '').localeCompare(a.sourceDate || ''));
+  for (const t of newest) {
     if (squash(t.goalTitle ?? goals.get(t.goalId ?? '') ?? '') !== want) continue;
-    const d = parseDated(t.content, today);
-    if (!d || seen.has(`${d.date}|${squash(d.title)}`)) continue;
-    seen.add(`${d.date}|${squash(d.title)}`);
+    const d = parseDated(t.content, today, true);
+    if (!d || seen.has(squash(d.title))) continue;
+    seen.add(squash(d.title));
+    if (!includePast && d.date < today) continue;
     out.push({ id: t.id, ...d });
   }
   return out.sort((a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title));

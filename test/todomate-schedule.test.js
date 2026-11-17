@@ -134,3 +134,15 @@ test('a cleared countdown stays hidden until the next morning', () => {
   assert.deepEqual(countdownItems(list, kst('2026-11-03T20:00:00'), hidden), []);
   assert.equal(countdownItems(list, kst('2026-11-04T06:00:00'), hidden)[0].badge, 'D-2');
 });
+
+test('same-name dates use the newest todo day, including an earlier replacement date', () => {
+  const todos = todosOf({ items: [
+    { id: 'new', content: '11/6 Team Review', goalTitle: 'D-Day', formattedDate: '2026-11-02' },
+    { id: 'old', content: '11/9 Team  Review', goalTitle: 'D-Day', formattedDate: '2026-10-30' },
+  ] });
+  for (const order of [todos, [...todos].reverse()]) {
+    assert.deepEqual(countdownsOf(order, new Map(), 'D-Day', '2026-11-03'), [
+      { id: 'new', date: '2026-11-06', title: 'Team Review' },
+    ]);
+  }
+});

@@ -8,9 +8,9 @@ const path = require('node:path');
 const { EventEmitter } = require('node:events');
 const { TodomateFeature, AUTH_ID, TOOLBOX_ID } = require('../src/todomate/feature');
 const { MCP_URL, TOOLBOX_URL } = require('../src/todomate/mcp');
+const { Settings } = require('../src/settings');
 
 const kst = (s) => Date.parse(`${s}+09:00`);
-const TIMERS = { setInterval: () => 1, clearInterval() {} };
 const OTT = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 
 function settingsStore(initial = {}) {
@@ -70,7 +70,7 @@ function playmcp(state) {
   };
 }
 
-function setUp(t, { todos, recent = [], now = kst('2026-11-03T09:00:00') }) {
+function setUp(t, { todos, recent = [], now = kst('2026-11-03T09:00:00'), persistent = false }) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'todomate-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const state = { todos, recent, refuse: false, now, prompts: 0, exchanges: [], ranges: [], lists: [], opened: [] };
@@ -80,13 +80,14 @@ function setUp(t, { todos, recent = [], now = kst('2026-11-03T09:00:00') }) {
     safeStorage,
     shell: { openExternal: async (url) => { state.opened.push(url); } },
   };
-  const settings = settingsStore();
+  const settings = persistent ? new Settings(path.join(dir, 'settings.json')) : settingsStore();
+  t.after(() => clearTimeout(settings.timer));
   const feature = new TodomateFeature({
     electron,
     settings,
     fetch: playmcp(state),
     now: () => state.now,
-    timers: TIMERS,
+    timers: { setInterval: (fn) => { state.tick = fn; return 1; }, clearInterval() {} },
     askForPrompt: async () => {
       state.prompts++;
       return `mcp-gateway에 연결해 줘.
@@ -95,7 +96,22 @@ oneTimeToken: ${OTT}`;
     },
   });
   feature.on('change', (list) => state.lists.push(list));
-  return { feature, settings, state, dir };
+  return { feature, settings, state, dir, electron };
+}
+
+function restart(t, fixture) {
+  fixture.feature.stop();
+  fixture.settings.save();
+  const settings = new Settings(fixture.settings.file);
+  const { state, electron } = fixture;
+  const feature = new TodomateFeature({
+    electron, settings, fetch: playmcp(state), now: () => state.now,
+    timers: { setInterval: (fn) => { state.tick = fn; return 1; }, clearInterval() {} },
+  });
+  t.after(() => { feature.stop(); clearTimeout(settings.timer); });
+  feature.on('change', (list) => state.lists.push(list));
+  feature.start();
+  return { ...fixture, feature, settings };
 }
 
 const TODOS = [
@@ -256,17 +272,131 @@ test('a toolbox without TodoMate shows one bubble that opens the toolbox, until 
   assert.equal(feature.open(TOOLBOX_ID), true);
   assert.deepEqual(state.opened, [TOOLBOX_URL]);
 
-  // × leaves it, and so does a 500 in between.
+  // × hides it immediately, and a 500 in between doesn't bring it back.
   feature.dismiss(TOOLBOX_ID);
+  assert.ok(!state.lists.at(-1).some((b) => b.id === TOOLBOX_ID));
   state.noTool = false;
   state.down = true;
   await feature.checkNow();
-  assert.ok(state.lists.at(-1).some((b) => b.id === TOOLBOX_ID));
+  assert.ok(!state.lists.at(-1).some((b) => b.id === TOOLBOX_ID));
 
   // Linked again on the site: the next read works and the bubble goes.
   state.down = false;
   await feature.checkNow();
   assert.ok(!state.lists.at(-1).some((b) => b.id === TOOLBOX_ID));
   assert.ok(state.lists.at(-1).some((b) => b.title === '프로젝트 미팅'));
+  state.noTool = true;
+  feature.client.close();
+  feature.client = null;
+  await feature.checkNow();
+  assert.ok(state.lists.at(-1).some((b) => b.id === TOOLBOX_ID));
+  feature.stop();
+});
+
+for (const [failure, id] of [['refuse', AUTH_ID], ['noTool', TOOLBOX_ID]]) {
+  test(`${id}: dismissal survives retries and a disk restart, then resets after recovery`, async (t) => {
+    let fixture = setUp(t, { todos: TODOS, persistent: true });
+    let { feature } = fixture;
+    const { state } = fixture;
+    await feature.setEnabled(true);
+    await feature.checkNow();
+    state[failure] = true;
+    feature.client.close();
+    feature.client = null;
+    await feature.checkNow();
+    assert.ok(state.lists.at(-1).some((b) => b.id === id));
+    feature.dismiss(id);
+    assert.ok(!state.lists.at(-1).some((b) => b.id === id));
+    await feature.checkNow();
+    assert.ok(!state.lists.at(-1).some((b) => b.id === id));
+
+    fixture = restart(t, fixture);
+    feature = fixture.feature;
+    await feature.checkNow();
+    assert.ok(!state.lists.at(-1).some((b) => b.id === id));
+    state[failure] = false;
+    // Refresh the test's expired credentials after an authentication refusal.
+    if (failure === 'refuse') feature.store.save(JSON.stringify({ accessToken: 'a2', expiresAt: state.now + 3600000 }));
+    await feature.checkNow();
+    assert.ok(state.lists.at(-1).some((b) => b.title === '프로젝트 미팅'));
+    state[failure] = true;
+    feature.client.close();
+    feature.client = null;
+    await feature.checkNow();
+    assert.ok(state.lists.at(-1).some((b) => b.id === id));
+    feature.stop();
+  });
+}
+
+test('saved D-days appear immediately after a disk restart without tokens and count down offline', async (t) => {
+  let fixture = setUp(t, { todos: TODOS, persistent: true,
+    recent: [{ id: 'd1', content: '11/6 저널클럽 발표', goal_id: 'g3' }],
+  });
+  let { feature } = fixture;
+  const { state } = fixture;
+  await feature.setEnabled(true);
+  await feature.checkNow();
+  feature.store.clear();
+  state.now = kst('2026-11-04T06:00:00');
+  fixture = restart(t, fixture);
+  feature = fixture.feature;
+  // The saved bubble is emitted before the failed request completes, without yesterday's schedule.
+  assert.deepEqual(said(state.lists.at(-1)), ['D-2 11/6(금) 저널클럽 발표']);
+  await feature.checkNow();
+  feature.dismiss(AUTH_ID);
+  assert.deepEqual(said(state.lists.at(-1)), ['D-2 11/6(금) 저널클럽 발표']);
+  const id = state.lists.at(-1)[0].id;
+  feature.dismiss(id);
+  fixture = restart(t, fixture);
+  feature = fixture.feature;
+  await feature.checkNow();
+  assert.deepEqual(state.lists.at(-1), []);
+  state.now = kst('2026-11-05T06:00:00');
+  state.tick();
+  assert.deepEqual(said(state.lists.at(-1)), ['D-1 11/6(금) 저널클럽 발표']);
+  state.now = kst('2026-11-07T00:00:00');
+  state.tick();
+  assert.deepEqual(state.lists.at(-1), []);
+  feature.stop();
+});
+
+test('later reads retain missing D-days and replace matching names, including dates moved into the past', async (t) => {
+  const { feature, state } = setUp(t, { todos: [], recent: [
+    { id: 'old', content: '11/6 저널클럽 발표', goal_id: 'g3', formattedDate: '2026-10-30' },
+    { id: 'keep', content: '12/22 긴 발표', goal_id: 'g3' },
+  ] });
+  await feature.setEnabled(true);
+  await feature.checkNow();
+  state.todos = [{ id: 'new', content: '11/9 저널클럽 발표', goal_id: 'g3' }];
+  state.recent = state.recent.slice(0, 1); // the old date still exists; the other name is absent
+  await feature.checkNow();
+  assert.deepEqual(said(state.lists.at(-1)), ['D-6 11/9(월) 저널클럽 발표', 'D-49 12/22(화) 긴 발표']);
+  feature.dismiss(state.lists.at(-1)[0].id);
+  state.todos[0].id = 'another-copy';
+  await feature.checkNow();
+  assert.deepEqual(said(state.lists.at(-1)), ['D-49 12/22(화) 긴 발표']);
+  state.todos[0].content = '11/8 저널클럽 발표';
+  await feature.checkNow();
+  assert.deepEqual(said(state.lists.at(-1)), ['D-5 11/8(일) 저널클럽 발표', 'D-49 12/22(화) 긴 발표']);
+  state.todos[0].content = '11/2 저널클럽 발표';
+  await feature.checkNow();
+  assert.deepEqual(said(state.lists.at(-1)), ['D-49 12/22(화) 긴 발표']);
+  feature.stop();
+});
+
+test('D-day caches stay separate when switching categories while offline', async (t) => {
+  const { feature, state } = setUp(t, { todos: [
+    { id: 'd1', content: '11/6 발표', goal_id: 'g3' },
+    { id: 'd2', content: '11/9 발표', goal_id: 'g2' },
+  ] });
+  await feature.setEnabled(true);
+  await feature.checkNow();
+  const categories = feature.menu().submenu.find((m) => m.label.startsWith('D-Day 카테고리')).submenu;
+  categories.find((m) => m.label === 'Logistics').click();
+  assert.deepEqual(said(state.lists.at(-1)), ['D-6 11/9(월) 발표']);
+  state.down = true;
+  await feature.checkNow();
+  categories.find((m) => m.label === 'D-Day').click();
+  assert.deepEqual(said(state.lists.at(-1)), ['D-3 11/6(금) 발표']);
   feature.stop();
 });
