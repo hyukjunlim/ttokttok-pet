@@ -37,6 +37,34 @@ test('offline preflight does not change the reachable host', async () => {
   assert.equal(targets.snapshot().phase, 'failed');
 });
 
+test('compatibility warnings survive preflight and Apply on Windows, WSL and SSH', async () => {
+  const warning = 'Account switch compatibility is unverified for Codex 0.170.0.';
+  const run = (host, op, identity) => {
+    const result = op === 'status'
+      ? { current: null, ready: true, unverifiedVersions: ['0.170.0', 'example-private-value'] }
+      : { current: ACCOUNT.identity, applied: true };
+    return runTarget(host, op, identity, { windows: async () => result, spawnFn: () => {
+      const child = new EventEmitter();
+      child.stdin = new PassThrough(); child.stdout = new PassThrough(); child.stderr = new PassThrough(); child.kill = () => {};
+      queueMicrotask(() => {
+        child.stdout.write(JSON.stringify({ result }) + '\n');
+        child.emit('close');
+      });
+      return child;
+    } });
+  };
+  const targets = new TargetAccounts({ targets: () => HOSTS, run });
+  const states = [];
+  targets.on('change', (state) => states.push({ ...state.targets }));
+  targets.begin(ACCOUNT);
+  await targets.task;
+  assert.equal(targets.snapshot().phase, 'done');
+  for (const host of HOSTS) {
+    assert.ok(states.some((state) => state[host].status === 'ready' && state[host].warning === warning));
+    assert.deepEqual(targets.snapshot().targets[host], { status: 'applied', warning });
+  }
+});
+
 test('a failure on the first target marks the unvisited targets as not checked', async () => {
   const calls = [];
   const targets = new TargetAccounts({ targets: () => HOSTS, run: async (host) => { calls.push(host); throw new Error('Blocked'); } });

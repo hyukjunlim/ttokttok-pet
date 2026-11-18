@@ -27,8 +27,8 @@ const ERRORS = {
   managed_auth: 'This target has managed authentication settings; they were not changed.',
   environment_auth: 'This target uses an environment-provided credential; it was not changed.',
   unsupported_store: 'This target does not use file-based Codex login storage.',
-  unsupported_version: 'This action has been verified for Codex 0.166–0.167. Update compatibility before using another version.',
-  unknown_running_version: 'An older or unverified Codex process is running. Close its session or update it (including the Codex extension in VS Code) before applying. It was not stopped.',
+  unsupported_version: 'Account switching requires an identifiable Codex version of 0.166.x or later.',
+  unknown_running_version: 'A running Codex process uses an unsupported or unidentified version. Close its session or use a supported Codex version before applying.',
   unsupported_auth: 'The current target login is not a supported ChatGPT subscription login.',
   codex_missing: 'Codex could not be found on this target.',
   codex_failed: 'Codex on this target could not start. Reinstall or update it there.',
@@ -51,15 +51,23 @@ function targetError(message) {
   return processes.length ? `${base}\n${processes.join('\n')}` : base;
 }
 
+function targetResult(result) {
+  const versions = Array.isArray(result?.unverifiedVersions)
+    ? result.unverifiedVersions.filter((version) => typeof version === 'string' && version.length <= 61
+      && /^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$/.test(version)) : [];
+  return {
+    current: typeof result?.current === 'string' ? result.current : null,
+    ready: result?.ready === true, applied: result?.applied === true, unchanged: result?.unchanged === true,
+    ...(versions.length && { warning: `Account switch compatibility is unverified for Codex ${versions.join(', ')}.` }),
+  };
+}
+
 function runTarget(target, operation, identity, { signal, onLogin = () => {}, spawnFn = spawn, windows = runWindowsTarget, timeoutMs = operation === 'enroll' ? 660_000 : 120_000 } = {}) {
   if (!(FIXED.includes(target) || sshHost(target)) || !['inspect', 'status', 'enroll', 'apply'].includes(operation)
     || (operation !== 'inspect' && !/^[a-f0-9]{64}$/.test(identity))) return Promise.reject(new Error('Invalid target request.'));
   if (signal?.aborted) return Promise.reject(new Error(ERRORS.cancelled));
   if (target === 'Windows') {
-    return windows(operation, operation === 'inspect' ? null : identity, { signal, onLogin, timeoutMs }).then((result) => ({
-      current: typeof result?.current === 'string' ? result.current : null,
-      ready: result?.ready === true, applied: result?.applied === true, unchanged: result?.unchanged === true,
-    }), (error) => {
+    return windows(operation, operation === 'inspect' ? null : identity, { signal, onLogin, timeoutMs }).then(targetResult, (error) => {
       // No other error text is shown: it could quote a credential file.
       throw new Error(error instanceof Problem ? targetError({ error: error.code, blockers: error.blockers, version: error.version })
         : 'The target could not complete the login change.');
@@ -112,8 +120,7 @@ function runTarget(target, operation, identity, { signal, onLogin = () => {}, sp
           }
           onLogin({ target, url: url.href, code: message.code });
         } else if (message.result && typeof message.result === 'object') {
-          finish(null, { current: typeof message.result.current === 'string' ? message.result.current : null,
-            ready: message.result.ready === true, applied: message.result.applied === true, unchanged: message.result.unchanged === true });
+          finish(null, targetResult(message.result));
           return;
         }
       }
@@ -179,7 +186,10 @@ class TargetAccounts extends EventEmitter {
     const request = (target, operation) => this.run(target, operation, account.identity, { signal, onLogin: (pending) => {
       this.state.pending = pending; this.changed();
     } });
-    const update = (target, value) => { this.state.targets[target] = value; this.changed(); };
+    const update = (target, value, warning = this.state.targets[target].warning) => {
+      this.state.targets[target] = warning ? { ...value, warning } : value;
+      this.changed();
+    };
     const observe = (target, current) => { this.observed[target] = { status: 'known', current, at: this.now() }; };
     let target;
     try {
@@ -187,7 +197,7 @@ class TargetAccounts extends EventEmitter {
       for (target of hosts) {
         const status = await request(target, 'status');
         observe(target, status.current);
-        update(target, { status: status.ready ? 'ready' : 'needs_login' });
+        update(target, { status: status.ready ? 'ready' : 'needs_login' }, status.warning);
       }
       for (target of hosts) {
         if (this.state.targets[target].status !== 'needs_login') continue;
@@ -195,7 +205,7 @@ class TargetAccounts extends EventEmitter {
         const status = await request(target, 'enroll');
         this.state.pending = null;
         if (!status.ready) throw new Error('The target login is not ready.');
-        update(target, { status: 'ready' });
+        update(target, { status: 'ready' }, status.warning);
       }
       this.state.phase = 'applying';
       for (target of hosts) {
@@ -203,7 +213,7 @@ class TargetAccounts extends EventEmitter {
         const result = await request(target, 'apply');
         if (!result.applied || result.current !== account.identity) throw new Error('The selected target account could not be verified.');
         observe(target, result.current);
-        update(target, { status: 'applied' });
+        update(target, { status: 'applied' }, result.warning);
       }
       this.state.phase = 'done';
     } catch (error) {

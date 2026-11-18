@@ -334,7 +334,18 @@ def under(file, mounts):
     return any(file == m or file.startswith(m + '/') for m in mounts)
 
 
-def codex_executable(mounts=None):
+VERIFIED_VERSION = re.compile(r'(?:0\.(?:166|167)\..*|0\.169\.0)')
+VERSION = re.compile(r'([0-9]+)\.([0-9]+)\.[0-9]+(?:-[0-9A-Za-z.-]+)?')
+
+
+def version_compatibility(version):
+    match = VERSION.fullmatch(version)
+    if not match or (int(match[1]) == 0 and int(match[2]) < 166):
+        return 'unsupported'
+    return 'verified' if VERIFIED_VERSION.fullmatch(version) else 'unverified'
+
+
+def codex_executable(mounts=None, *, unverified=None):
     # WSL's PATH also lists Windows folders (/mnt/c/...); a Codex found there is this PC's
     # Windows Codex, which cannot run in Linux. Use only this host's own Codex.
     mounts = windows_mounts() if mounts is None else mounts
@@ -354,12 +365,16 @@ def codex_executable(mounts=None):
     found = re.search(r'codex-cli ([0-9A-Za-z.\-]+)', result.stdout)
     if not found:
         raise Problem('codex_failed')
-    if not re.fullmatch(r'0\.(166|167)\..*', found.group(1)):
-        raise Problem('unsupported_version', version=found.group(1))
+    version = found.group(1)
+    compatibility = version_compatibility(version)
+    if compatibility == 'unsupported':
+        raise Problem('unsupported_version', version=version)
+    if compatibility == 'unverified' and unverified is not None:
+        unverified.add(version)
     return executable
 
 
-def check_running_writers(home):
+def check_running_writers(home, unverified):
     versions = {}
     blockers = []
     home = pathlib.Path(home).resolve()
@@ -396,8 +411,11 @@ def check_running_writers(home):
             except (OSError, subprocess.TimeoutExpired):
                 versions[key] = 'unverified'
         version = versions[key]
-        if not re.fullmatch(r'0\.(166|167)\..*', version):
+        compatibility = version_compatibility(version)
+        if compatibility == 'unsupported':
             blockers.append({'pid': int(process.name), 'version': version, 'client': client})
+        elif compatibility == 'unverified':
+            unverified.add(version)
     if blockers:
         raise Problem('unknown_running_version', blockers)
 
@@ -425,16 +443,26 @@ def main():
     if operation == 'inspect':
         send({'result': store.inspect()})
         return
-    executable = codex_executable()
+    unverified = set()
+
+    def guard():
+        check_running_writers(home, unverified)
+
+    def send_result(result):
+        if unverified:
+            result = {**result, 'unverifiedVersions': sorted(unverified)}
+        send({'result': result})
+
+    executable = codex_executable(unverified=unverified)
     state = store.status(key)
     if state['current'] != key:
-        check_running_writers(home)
+        guard()
     if operation == 'status':
-        send({'result': state})
+        send_result(state)
         return
     if operation == 'enroll':
         if state['ready']:
-            send({'result': state})
+            send_result(state)
             return
         with lock(store.root / 'slots.lock'):
             slot = store.slot(key)
@@ -453,9 +481,9 @@ def main():
                 rpc.request('account/rateLimits/read')
             finally:
                 rpc.close()
-        send({'result': store.status(key)})
+        send_result(store.status(key))
         return
-    send({'result': store.commit(key, lambda slot: validate(executable, slot), lambda: check_running_writers(home))})
+    send_result(store.commit(key, lambda slot: validate(executable, slot), guard))
 
 
 if __name__ == '__main__':

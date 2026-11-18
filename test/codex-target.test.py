@@ -163,11 +163,23 @@ class CodexLookupTest(unittest.TestCase):
             target.codex_executable([])
         self.assertEqual(caught.exception.code, 'codex_failed')
 
-    def test_unverified_version_reports_the_version_found(self):
+    def test_linux_codex_0_169_0_is_supported(self):
+        linux = self.codex('bin', 'echo "codex-cli 0.169.0"')
+        with patch.dict(target.os.environ, {'PATH': str(linux)}):
+            self.assertEqual(target.codex_executable([]), str(linux / 'codex'))
+
+    def test_newer_linux_version_returns_executable_and_records_a_warning(self):
         newer = self.codex('bin', 'echo "codex-cli 0.170.0"')
-        with patch.dict(target.os.environ, {'PATH': str(newer)}), self.assertRaises(target.Problem) as caught:
+        unverified = set()
+        with patch.dict(target.os.environ, {'PATH': str(newer)}):
+            self.assertEqual(target.codex_executable([], unverified=unverified), str(newer / 'codex'))
+        self.assertEqual(unverified, {'0.170.0'})
+
+    def test_older_linux_version_reports_the_version_found(self):
+        older = self.codex('bin', 'echo "codex-cli 0.165.0"')
+        with patch.dict(target.os.environ, {'PATH': str(older)}), self.assertRaises(target.Problem) as caught:
             target.codex_executable([])
-        self.assertEqual((caught.exception.code, caught.exception.version), ('unsupported_version', '0.170.0'))
+        self.assertEqual((caught.exception.code, caught.exception.version), ('unsupported_version', '0.165.0'))
 
     def test_only_windows_drive_mounts_are_excluded(self):
         mounts = self.base / 'mounts'

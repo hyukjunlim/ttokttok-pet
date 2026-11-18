@@ -2,7 +2,7 @@
 // This PC's Codex login slots: the Windows counterpart of target.py, run in the pet's own process.
 // It keeps target.py's rules: switch only a file-based ChatGPT login, keep the outgoing login in its
 // slot, journal the switch so an interrupted one is finished or undone, never overwrite a newer
-// login, and refuse while an unverified Codex is running. Credentials never leave this PC.
+// login, and refuse while an older or unidentified Codex is running. Credentials never leave this PC.
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -13,7 +13,8 @@ const { CodexRpc } = require('./rpc');
 const { findCodex } = require('./locate');
 const { asciiJson } = require('../ssh-watcher');
 
-const VERIFIED = /^0\.(166|167)\./;
+const VERIFIED = /^0\.(?:(?:166|167)\.|169\.0$)/;
+const VERSION = /^(\d+)\.(\d+)\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 const LOCK_WAIT_MS = 10_000;
 const MANAGED_KEYS = ['forced_login_method', 'forced_chatgpt_workspace_id', 'chatgpt_base_url'];
 
@@ -325,18 +326,26 @@ function versionOf(executable) {
   });
 }
 
-async function codexExecutable({ find = findCodex, version = versionOf } = {}) {
+function versionCompatibility(version) {
+  const match = VERSION.exec(version);
+  if (!match || (Number(match[1]) === 0 && Number(match[2]) < 166)) return 'unsupported';
+  return VERIFIED.test(version) ? 'verified' : 'unverified';
+}
+
+async function codexExecutable({ find = findCodex, version = versionOf, unverified = new Set() } = {}) {
   const executable = find();
   if (!executable) throw new Problem('codex_missing');
   const found = await version(executable);
   if (!found) throw new Problem('codex_failed');
-  if (!VERIFIED.test(found)) throw new Problem('unsupported_version', { version: found });
+  const compatibility = versionCompatibility(found);
+  if (compatibility === 'unsupported') throw new Problem('unsupported_version', { version: found });
+  if (compatibility === 'unverified') unverified.add(found);
   return executable;
 }
 
 // Unlike Linux, another process's CODEX_HOME cannot be read here, so every Codex this user runs
 // counts. The pet's own usage monitor runs the verified Codex, so it never blocks.
-async function checkRunningWriters(helper, version = versionOf) {
+async function checkRunningWriters(helper, version = versionOf, unverified = new Set()) {
   const versions = new Map();
   const blockers = [];
   for (const p of await helper.processes()) {
@@ -345,7 +354,9 @@ async function checkRunningWriters(helper, version = versionOf) {
     const key = p.path.toLowerCase();
     if (!versions.has(key)) versions.set(key, (await version(p.path)) || 'unverified');
     const found = versions.get(key);
-    if (!VERIFIED.test(found)) blockers.push({ pid: p.pid, version: found, client: /vscode/i.test(p.path) ? 'VS Code extension' : 'Codex' });
+    const compatibility = versionCompatibility(found);
+    if (compatibility === 'unsupported') blockers.push({ pid: p.pid, version: found, client: /vscode/i.test(p.path) ? 'VS Code extension' : 'Codex' });
+    if (compatibility === 'unverified') unverified.add(found);
   }
   if (blockers.length) throw new Problem('unknown_running_version', { blockers });
 }
@@ -404,13 +415,17 @@ async function perform(operation, key, { signal, onLogin, helper, deps }) {
   if (operation === 'inspect') return store.inspect();
   const factory = deps.rpc || ((o) => new CodexRpc(o));
   const version = deps.version || versionOf;
-  const executable = await codexExecutable({ find: deps.find || findCodex, version });
-  const guard = () => checkRunningWriters(helper, version);
+  const unverified = new Set();
+  const withVersions = (result) => unverified.size
+    ? { ...result, unverifiedVersions: [...unverified].sort() }
+    : result;
+  const executable = await codexExecutable({ find: deps.find || findCodex, version, unverified });
+  const guard = () => checkRunningWriters(helper, version, unverified);
   const state = await store.status(key);
   if (state.current !== key) await guard();
-  if (operation === 'status') return state;
+  if (operation === 'status') return withVersions(state);
   if (operation === 'enroll') {
-    if (state.ready) return state;
+    if (state.ready) return withVersions(state);
     await store.hold([store.slotsLock], async () => {
       const slot = store.slot(key);
       fs.mkdirSync(slot, { recursive: true });
@@ -425,13 +440,14 @@ async function perform(operation, key, { signal, onLogin, helper, deps }) {
         await rpc.request('account/rateLimits/read').catch(rpcFailure(signal));
       } finally { await stopCodex(rpc, signal); }
     });
-    return store.status(key);
+    return withVersions(await store.status(key));
   }
-  return store.commit(key, async (slot) => {
+  const result = await store.commit(key, async (slot) => {
     const rpc = await openRpc(executable, slot, signal, factory);
     try { await rpc.request('account/rateLimits/read').catch(rpcFailure(signal)); }
     finally { await stopCodex(rpc, signal); }
   }, guard);
+  return withVersions(result);
 }
 
 // Same contract as runTarget for the other hosts: resolves with the result or rejects with a

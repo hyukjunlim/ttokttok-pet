@@ -170,10 +170,10 @@
       applied.append(el('h2', `${selected?.label || 'Account'} · ${state.apply.busy ? 'Apply' : 'Last Apply result'}`));
       const labels = { checking: 'Checking', not_checked: 'Not checked', needs_login: 'First sign-in required', ready: 'Ready', signing_in: 'Waiting for sign-in', applying: 'Applying', applied: 'Applied', error: 'Needs attention', cancelled: 'Cancelled', not_applied: 'Not applied', unknown: 'Unknown' };
       for (const [target, result] of Object.entries(state.apply.targets)) {
-        applied.append(el('p', `${target}: ${labels[result.status] || result.status}${result.error ? ` · ${result.error}` : ''}`));
+        const message = [result.error, result.warning].filter(Boolean).join(' · ');
+        applied.append(el('p', `${target}: ${labels[result.status] || result.status}${message ? ` · ${message}` : ''}`));
       }
       if (state.apply.phase === 'partial') applied.append(el('p', 'Only some targets are applied. Check each target’s status before retrying.'));
-      if (Object.values(state.apply.targets).some((t) => t.error?.includes('older or unverified'))) applied.append(el('p', 'Only changing the saved CLI login is blocked. Usage monitoring and banked-reset information still work.', 'detail'));
       if (state.apply.pending) {
         applied.append(el('p', `Sign in to ${selected?.label || 'the selected account'} for ${state.apply.pending.target}.`), el('code', state.apply.pending.code));
         applied.append(button('Open sign-in page', 'target-signin'));

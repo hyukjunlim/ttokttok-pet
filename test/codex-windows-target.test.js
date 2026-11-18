@@ -165,11 +165,18 @@ test('inspect reads the current login without recovering or changing slots', asy
 test('this PC uses its own verified Codex and says when it cannot run or is another version', async () => {
   await assert.rejects(codexExecutable({ find: () => null }), (e) => e.code === 'codex_missing');
   await assert.rejects(codexExecutable({ find: () => 'codex.exe', version: async () => null }), (e) => e.code === 'codex_failed');
-  await assert.rejects(codexExecutable({ find: () => 'codex.exe', version: async () => '0.170.0' }), (e) => e.code === 'unsupported_version' && e.version === '0.170.0');
-  assert.equal(await codexExecutable({ find: () => 'codex.exe', version: async () => '0.167.0-alpha.3.2' }), 'codex.exe');
+  for (const version of ['0.165.9', 'unverified']) {
+    await assert.rejects(codexExecutable({ find: () => 'codex.exe', version: async () => version }),
+      (e) => e.code === 'unsupported_version' && e.version === version);
+  }
+  const unverified = new Set();
+  for (const version of ['0.167.0-alpha.3.2', '0.169.0', '0.169.1', '0.170.0']) {
+    assert.equal(await codexExecutable({ find: () => 'codex.exe', version: async () => version, unverified }), 'codex.exe');
+  }
+  assert.deepEqual([...unverified], ['0.169.1', '0.170.0']);
 });
 
-test('a running unverified Codex of this user blocks; verified ones and other users do not', async () => {
+test('older or unidentified Codex processes of this user block a Windows switch', async () => {
   const helper = (processes) => ({ processes: async () => processes });
   const version = async (file) => (file.includes('old') ? '0.159.2' : file.includes('broken') ? null : '0.167.0');
   await checkRunningWriters(helper([{ pid: 10, path: 'C:\\example\\codex.exe', mine: true }, { pid: 11, path: 'C:\\old\\codex.exe', mine: false }]), version);
@@ -217,18 +224,23 @@ function deps(s, rpc, extra = {}) {
     find: () => 'codex.exe', version: async () => '0.167.0', rpc: rpc.factory, ...extra };
 }
 
-test('Windows enrolls a new account through device sign-in, then applies it', async (t) => {
+test('Windows enrolls and applies with an unverified newer Codex running and reports a warning', async (t) => {
   const s = setup(); t.after(s.cleanup);
   const kc = identity(auth('c'));
   const codex = fakeCodex(auth('c'));
   const logins = [];
-  assert.deepEqual(await runWindowsTarget('status', kc, { deps: deps(s, codex) }), { current: s.ka, ready: false });
-  const enrolled = await runWindowsTarget('enroll', kc, { onLogin: (p) => logins.push(p), deps: deps(s, codex) });
+  const settings = deps(s, codex, {
+    helper: () => Object.assign(s.locker, { processes: async () => [{ pid: 20, path: 'C:\\example\\codex.exe', mine: true }], close() {} }),
+    version: async (executable) => executable === 'codex.exe' ? '0.169.0' : '0.170.0',
+  });
+  const unverifiedVersions = ['0.170.0'];
+  assert.deepEqual(await runWindowsTarget('status', kc, { deps: settings }), { current: s.ka, ready: false, unverifiedVersions });
+  const enrolled = await runWindowsTarget('enroll', kc, { onLogin: (p) => logins.push(p), deps: settings });
   assert.deepEqual(logins, [{ target: 'Windows', url: 'https://auth.openai.com/codex/device', code: 'EXAMPLE' }]);
-  assert.equal(enrolled.ready, true);
+  assert.deepEqual(enrolled, { current: s.ka, ready: true, unverifiedVersions });
   assert.deepEqual(codex.started[0], { home: s.store.slot(kc), store: 'file' });
-  const applied = await runWindowsTarget('apply', kc, { deps: deps(s, codex) });
-  assert.deepEqual(applied, { current: kc, applied: true, unchanged: false });
+  const applied = await runWindowsTarget('apply', kc, { deps: settings });
+  assert.deepEqual(applied, { current: kc, applied: true, unchanged: false, unverifiedVersions });
   assert.deepEqual(readJson(s.store.active), auth('c'));
   assert.deepEqual(readJson(path.join(s.store.slot(s.ka), 'auth.json')), s.a);
 });
@@ -307,8 +319,8 @@ test('CodexRpc.shutdown resolves only once Codex has exited, killing it after th
 
 test('runTarget sends Windows to this PC and reports its problems like the other hosts', async () => {
   const calls = [];
-  const windows = async (operation, key) => { calls.push([operation, key]); throw new Problem('unsupported_version', { version: '0.170.0' }); };
-  await assert.rejects(runTarget('Windows', 'status', 'a'.repeat(64), { windows }), /verified for Codex 0\.166–0\.167[\s\S]*Found: 0\.170\.0/);
+  const windows = async (operation, key) => { calls.push([operation, key]); throw new Problem('unsupported_version', { version: '0.165.0' }); };
+  await assert.rejects(runTarget('Windows', 'status', 'a'.repeat(64), { windows }), /requires an identifiable Codex version of 0\.166\.x or later[\s\S]*Found: 0\.165\.0/);
   await assert.rejects(runTarget('Windows', 'inspect', null, { windows: async () => { throw new Error('C:\\Users\\example\\.codex\\auth.json: secret'); } }),
     (e) => !/secret|auth\.json/.test(e.message));
   assert.deepEqual(calls, [['status', 'a'.repeat(64)]]);
