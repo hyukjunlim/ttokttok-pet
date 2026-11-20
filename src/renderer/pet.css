@@ -12,7 +12,7 @@
   --review: #2e8b57;
   --background: #5e7891;         /* a background task's, not the page's */
   --badge: #c96442;
-  --pill-width: 242px;           /* every bubble, the weekly-limit meter too */
+  --pill-width: 193px;           /* every bubble, the weekly-limit meter too */
 }
 
 @media (prefers-color-scheme: dark) {
@@ -131,7 +131,7 @@ body {
   align-items: center;
   gap: 10px;
   box-sizing: border-box;
-  width: var(--pill-width);      /* every bubble the same width; long text ends in "…" */
+  width: var(--pill-width);      /* every bubble the same width; text wraps inside */
   max-width: 100%;
   padding: 8px 15px 8px 12px;
   border-radius: 18px;
@@ -171,41 +171,46 @@ body {
 }
 
 .line1 {
-  display: flex;
-  gap: 6px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
   min-width: 0;
-  white-space: nowrap;
+  overflow: hidden;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 
 .label {
-  flex: none;
   font-weight: 650;
   color: var(--c);
+  margin-right: 6px;
+  white-space: nowrap;
 }
 
 .title {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .detail {
-  display: flex;
-  gap: 4px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   min-width: 0;
   margin-top: 1px;
+  overflow: hidden;
   color: var(--muted);
   font-size: 14px;
-  white-space: nowrap;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 
-.what {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+.detail[hidden] { display: none; }
 
-.ago { flex: none; }
+.what { min-width: 0; }
+
+.ago { white-space: nowrap; }
+
+.what:not(:empty) + .ago { margin-left: 4px; }
 
 .close {
   position: absolute;

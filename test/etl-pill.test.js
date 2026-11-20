@@ -239,3 +239,26 @@ test("with session bubbles off, a session's Needs you or Ready doesn't move the 
   show([{ ...run, status: 'review' }, notice]);
   assert.deepEqual(show.acted.played, ['jumping'], 'All: it jumps');
 });
+
+test('D-Day bubbles omit the source app and move a leading date onto the second line', () => {
+  const [todo, slack, reset, auth] = page()([
+    { id: 'todomate:dday:2026-11-06:t1:2026-11-03', kind: 'todomate', status: 'review', badge: 'D-3', title: '11/6(금) 저널클럽 발표', project: '', detail: 'D-3 11/6(금) 저널클럽 발표', clearOnClick: true },
+    { id: 'slack:remind:2026-11-10:짧은 발표 2:d7', kind: 'slack', status: 'review', badge: 'D-7', title: '11/10(화) 짧은 발표 2', project: '10:00-11:00 · 발표 순서', detail: 'D-7 11/10(화) 10:00-11:00 · 짧은 발표 2', clearOnClick: true },
+    { id: 'resets:dday:claude:2026-11-03', kind: 'resets', app: 'claude', status: 'idle', badge: 'D-9', title: 'Claude · Weekly reset', project: '11/12(목) 07:00 만료 · 외 1개', detail: 'D-9 Claude · Weekly reset', clearOnClick: true },
+    { id: 'todomate:auth', kind: 'todomate', status: 'failed', badge: '연결 필요', title: '투두메이트: PlayMCP에 다시 연결', project: '클릭하면 연결 프롬프트를 받습니다' },
+  ]);
+  assert.equal(find(todo, 'label').textContent, 'D-3');
+  assert.equal(find(todo, 'title').textContent, '저널클럽 발표');
+  assert.equal(find(todo, 'what').textContent, '11/6(금)');
+  assert.equal(todo.getAttribute('aria-label'), '11/6(금) 저널클럽 발표, D-3 11/6(금) 저널클럽 발표, Click to clear until tomorrow');
+
+  assert.equal(find(slack, 'label').textContent, 'D-7');
+  assert.equal(find(slack, 'title').textContent, '짧은 발표 2');
+  assert.equal(find(slack, 'what').textContent, '11/10(화) · 10:00-11:00 · 발표 순서');
+
+  assert.equal(find(reset, 'label').textContent, 'D-9');
+  assert.equal(find(reset, 'title').textContent, 'Claude · Weekly reset');
+  assert.equal(find(reset, 'what').textContent, '11/12(목) 07:00 만료 · 외 1개');
+
+  assert.equal(find(auth, 'what').textContent, 'TodoMate · 클릭하면 연결 프롬프트를 받습니다');
+});

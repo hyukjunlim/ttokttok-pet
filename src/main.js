@@ -64,7 +64,7 @@ const WIN_WIDTH = 400;
 const TRAY_HEIGHT = 280;        // room kept above (or below) the pet for bubbles, at least
 const TRAY_GAP = 6;
 const EDGE_MARGIN = 24;
-const BUBBLE_MARGIN = 12;       // bubbles keep this distance from the monitor's edge
+const BUBBLE_MARGIN = 10;       // bubbles keep this distance from the monitor's edge
 const SCALES = [
   { label: 'Small', value: 0.5 },
   { label: 'Medium', value: 0.75 },

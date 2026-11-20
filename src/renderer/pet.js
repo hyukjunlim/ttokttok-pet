@@ -20,6 +20,7 @@
   const ATTENTION = new Set(['waiting', 'failed', 'review']);
   const NOTICES = new Set(['etl', 'slack', 'todomate', 'resets', 'practice']);   // bubbles that aren't sessions
   const ETL_LINK = /^https:\/\/myetl\.snu\.ac\.kr\//;
+  const DDAY_DATE_RE = /^(\d{1,2}\/\d{1,2}\([일월화수목금토]\))\s+(.+)$/s;   // leading date on D-Day titles, moved to line 2
   const SHADOW_ROOM = 16;          // px kept around the bubbles so their shadows aren't cut off
 
   let sessions = [];
@@ -30,7 +31,7 @@
   let awaitingLanding = false;
   let scale = 0.75;
   let petCenterX = window.innerWidth / 2;
-  let bubbleMargin = 12;
+  let bubbleMargin = 10;
   let previous = new Map();
 
   // ---------------------------------------------------------- layout
@@ -178,6 +179,12 @@
     icon.className = 'icon';
     el.append(icon);
 
+    // D-Day bubbles drop the app-source label and move any leading "MM/DD(요일)" date to the
+    // second line, matching rate-limit reset bubbles and freeing line 1 for the event title.
+    const ddayMatch = s.clearOnClick ? DDAY_DATE_RE.exec(String(s.title ?? '')) : null;
+    const displayTitle = ddayMatch ? ddayMatch[2] : s.title;
+    const ddayDate = ddayMatch ? ddayMatch[1] : '';
+
     const text = document.createElement('span');
     text.className = 'text';
     const line = document.createElement('span');
@@ -187,16 +194,17 @@
     label.textContent = s.badge || LABELS[s.status] || s.status;
     const title = document.createElement('span');
     title.className = 'title';
-    title.textContent = s.title;
+    title.textContent = displayTitle;
     line.append(label, title);
-    // "Claude · tokenizer · 5m": which app, the project, how long. A long project name gets cut
-    // short, but the time stays visible.
+    // "Claude · tokenizer · 5m": which app, the project, how long.
     const detail = document.createElement('span');
     detail.className = 'detail';
     const ago = formatAgo(s.since);
-    // Today's classes and TodoMate schedule read as one timeline (timeline.js), without the app.
-    detail.append(span('what', [s.startsAt == null && source, s.project].filter(Boolean).join(' · ')));
+    // Today's classes, TodoMate schedule and D-Day bubbles omit the app source label.
+    const what = [s.startsAt == null && !s.clearOnClick && source, ddayDate, s.project].filter(Boolean).join(' · ');
+    detail.append(span('what', what));
     if (ago) detail.append(span('ago', `· ${ago}`));
+    detail.hidden = !what && !ago;
     text.append(line, detail);
     el.append(text);
 

@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { fixture } = require('./renderer-fixture');
 
-const LAYOUT = { layout: 'above', scale: 1, petLeft: 88, margin: 12 };
+const LAYOUT = { layout: 'above', scale: 1, petLeft: 88, margin: 10 };
 
 // What the page sent, as plain data: arrays made inside the vm context have another Array
 // prototype, which strict deepEqual refuses.
@@ -13,7 +13,7 @@ function shapes(f) {
 }
 
 function pill(f, rect) {
-  return { style: {}, offsetWidth: 242, getBoundingClientRect: () => ({ width: rect.right - rect.left, height: rect.bottom - rect.top, ...rect }), addEventListener() {} };
+  return { style: {}, offsetWidth: 193, getBoundingClientRect: () => ({ width: rect.right - rect.left, height: rect.bottom - rect.top, ...rect }), addEventListener() {} };
 }
 
 test('the pet is reported from the window edge it sits against', () => {
@@ -46,22 +46,52 @@ test('a frame from another row of the sheet gets its own shape before it is draw
 
 test('each bubble is covered, with room all round for its shadow', () => {
   const f = fixture();
-  f.nodes.tray.children = [pill(f, { left: 80, top: 100, right: 322, bottom: 160 })];
+  f.nodes.tray.children = [pill(f, { left: 80, top: 100, right: 273, bottom: 160 })];
   f.nodes.tray.scrollHeight = 100;
   f.nodes.tray.clientHeight = 300;
   f.nodes.tray.getBoundingClientRect = () => ({ left: 0, top: 50, right: 400, bottom: 440, width: 400, height: 390 });
   f.callbacks.Layout(LAYOUT);
-  assert.deepEqual(shapes(f).at(-1).rects, [[98, 76, 100, 120], [54, 308, 294, 110]]);
+  assert.deepEqual(shapes(f).at(-1).rects, [[98, 76, 100, 120], [54, 308, 245, 110]]);
 });
 
 test('a stack scrolled past the top of its tray is cut off there', () => {
   const f = fixture();
-  f.nodes.tray.children = [pill(f, { left: 80, top: 100, right: 322, bottom: 160 })];
+  f.nodes.tray.children = [pill(f, { left: 80, top: 100, right: 273, bottom: 160 })];
   f.nodes.tray.scrollHeight = 100;
   f.nodes.tray.clientHeight = 300;
   f.nodes.tray.getBoundingClientRect = () => ({ left: 0, top: 50, right: 400, bottom: 120, width: 400, height: 70 });
   f.callbacks.Layout(LAYOUT);
-  assert.deepEqual(shapes(f).at(-1).rects[1], [54, 348, 294, 70]);
+  assert.deepEqual(shapes(f).at(-1).rects[1], [54, 348, 245, 70]);
+});
+
+test('bubbles clamp to the 10 px margin at each edge and center over the pet between them', () => {
+  const f = fixture();
+  const bubble = {
+    style: {},
+    offsetWidth: 193,
+    getBoundingClientRect() {
+      const left = parseFloat(this.style.marginLeft) || 0;
+      return { left, top: 100, right: left + this.offsetWidth, bottom: 160, width: this.offsetWidth, height: 60 };
+    },
+    addEventListener() {},
+  };
+  f.nodes.tray.children = [bubble];
+  f.nodes.tray.scrollHeight = 100;
+  f.nodes.tray.clientHeight = 300;
+  f.nodes.tray.getBoundingClientRect = () => ({ left: 0, top: 50, right: 400, bottom: 440, width: 400, height: 390 });
+
+  f.callbacks.Layout({ layout: 'above', scale: 0.75, petLeft: 10, margin: 10 });
+  assert.equal(bubble.style.maxWidth, '380px');
+  assert.equal(bubble.style.marginLeft, '10px');
+  assert.deepEqual(shapes(f).at(-1).rects[1], [0, 308, 229, 110]);
+
+  f.callbacks.Layout({ layout: 'above', scale: 1, petLeft: 104, margin: 10 });
+  assert.equal(bubble.style.marginLeft, '104px');
+  assert.deepEqual(shapes(f).at(-1).rects[1], [78, 308, 245, 110]);
+
+  f.callbacks.Layout({ layout: 'above', scale: 0.75, petLeft: 250, margin: 10 });
+  assert.equal(bubble.style.marginLeft, '197px');
+  assert.deepEqual(shapes(f).at(-1).rects[1], [171, 308, 229, 110]);
 });
 
 test('the badge on the pet is covered while it shows', () => {
