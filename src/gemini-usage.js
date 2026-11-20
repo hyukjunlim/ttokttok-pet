@@ -97,6 +97,9 @@ function runAgyQuota(binary, { timeoutMs = FETCH_TIMEOUT_MS, onChild = () => {} 
         maxBuffer: MAX_OUTPUT_BYTES,
         cwd: os.tmpdir(),
         windowsHide: true,
+        // Without this, agy spawns its background auto-updater in a new console,
+        // which flashes a Windows Terminal window on every poll. agy ignores '1'.
+        env: { ...process.env, AGY_CLI_DISABLE_AUTO_UPDATE: 'true' },
       },
       (err, stdout, stderr) => {
         onChild(null);
