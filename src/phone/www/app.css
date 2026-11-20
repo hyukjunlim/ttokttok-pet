@@ -17,7 +17,7 @@
   --background: #5e7891;
   --claude: #c96442;
   --codex: #3c3a37;
-  --gemini: #3b78e7;
+  --gemini: #4a79d1;
   --indent: 16px;
 }
 
@@ -38,7 +38,7 @@
     --background: #93abc4;
     --claude: #e08a68;
     --codex: #d8d3cc;
-    --gemini: #7aa7f7;
+    --gemini: #7da4ea;
   }
 }
 
@@ -241,6 +241,7 @@ h1 { margin: 0; font-size: 18px; font-weight: 600; }
 .track { position: relative; height: 4px; margin-top: 6px; border-radius: 2px; background: var(--border); }
 .fill { position: absolute; inset: 0 auto 0 0; border-radius: 2px; background: var(--claude); }
 .gauge.codex .fill { background: var(--codex); }
+.gauge.gemini .fill { background: var(--gemini); }
 .now { position: absolute; top: -3px; width: 2px; height: 10px; margin-left: -1px; background: var(--muted); }
 
 /* ---------------------------------------------------------- footer */

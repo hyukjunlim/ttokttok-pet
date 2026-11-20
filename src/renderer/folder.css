@@ -22,7 +22,7 @@
   --background: #5e7891;
   --claude: #c96442;
   --codex: #3c3a37;
-  --gemini: #3b78e7;
+  --gemini: #4a79d1;
   --indent: 14px;
 }
 
@@ -45,7 +45,7 @@
     --background: #93abc4;
     --claude: #e08a68;
     --codex: #d8d3cc;
-    --gemini: #7aa7f7;
+    --gemini: #7da4ea;
   }
 }
 
@@ -399,6 +399,7 @@ mark {
 }
 
 .gauge.claude .fill { background: var(--claude); }
+.gauge.gemini .fill { background: var(--gemini); }
 
 /* How far into the week: a tick across the bar, inside the row so no text is under it. */
 .gauge .now {

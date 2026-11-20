@@ -6,6 +6,7 @@
   --border: rgba(31, 30, 29, 0.10);
   --shadow: drop-shadow(0 6px 9px rgba(20, 14, 10, 0.16)) drop-shadow(0 1px 1.5px rgba(20, 14, 10, 0.12));
   --running: #c96442;            /* also (toned down) the weekly-limit meter's Claude row */
+  --gemini: #4a79d1;             /* the weekly-limit meter's Gemini row */
   --waiting: #c27c0e;
   --failed: #d93f3f;
   --review: #2e8b57;
@@ -22,6 +23,7 @@
     --border: rgba(255, 255, 255, 0.10);
     --shadow: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.45)) drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.35));
     --running: #e08a68;
+    --gemini: #7da4ea;
     --waiting: #f0b24a;
     --failed: #f16d6d;
     --review: #5cc28b;
@@ -260,6 +262,12 @@ body {
   --ink: #fff;
 }
 
+/* Gemini's row in a muted blue matching Claude's weight, with white text over the fill. */
+.gauge.gemini {
+  --fill: color-mix(in srgb, var(--gemini), #4a79d1);
+  --ink: #fff;
+}
+
 /* Between the rows, a divider that stops short of the edges. */
 .gauge + .gauge::after {
   content: '';
@@ -314,10 +322,14 @@ body {
 .gauge .ink { color: var(--ink); }
 
 .gauge.claude .base,
-.gauge.claude .ink { display: flex; }
+.gauge.claude .ink,
+.gauge.gemini .base,
+.gauge.gemini .ink { display: flex; }
 
 .gauge.claude > .name,
-.gauge.claude > .pct { visibility: hidden; }    /* still there, for the layout */
+.gauge.claude > .pct,
+.gauge.gemini > .name,
+.gauge.gemini > .pct { visibility: hidden; }    /* still there, for the layout */
 
 @keyframes pop {
   from { opacity: 0; transform: translateY(4px) scale(0.97); }

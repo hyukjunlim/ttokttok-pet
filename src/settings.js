@@ -21,6 +21,7 @@ const DEFAULTS = {
   showSessionBubbles: true, // ... sessions' too (Claude, Codex, web chats); off: the notices only (eTL, Slack, TodoMate, resets), no badge
   alwaysAnimate: true,     // animate even when Windows' Animation effects are off
   showUsage: true,         // the weekly-limit meter next to the pet
+  showGeminiUsage: true,   // Antigravity Gemini weekly limit, when agy is installed
   claudeUsageOverSsh: true,  // read Claude's usage from the mod on SSH hosts
   claudeSshHosts: [],        // the hosts from ~/.ssh/config picked for the mod (the desktop app's come on their own)
   claudeModOffered: false,   // the pet has asked once whether to set up its Claude Code mod

@@ -20,6 +20,7 @@ const { compareSessions } = require('./transcript');
 const { timeline } = require('./timeline');
 const { combineClaudeUsage, usageView } = require('./usage');
 const { ClaudeUsage } = require('./claude-usage');
+const { GeminiUsage, findAgyBinary } = require('./gemini-usage');
 const { LocalMod, bundledVersion, modFiles, runningWslDistros, sshInstaller, wslInstaller } = require('./claude-mod');
 const { isSameHost, sshConfigHosts } = require('./ssh-config');
 const { cleanShape, shapeForWindow, NO_SHAPE } = require('./shape');
@@ -128,8 +129,9 @@ const deleted = new Map();      // id -> when: chats deleted in the sidebar, lef
 let treeKey = '';
 let treeHosts = [];             // the tree last built for the sidebar, for its folders' menus
 let quitting = false;
-const usage = { claude: [], codex: null };   // Claude's readings from each place, Codex's newest (see usage.js)
+const usage = { claude: [], codex: null, gemini: null };   // Claude's readings from each place, Codex's and Gemini's newest (see usage.js)
 let claudeUsage = null;         // where Claude's readings come from (see claude-usage.js)
+let geminiUsage = null;         // Antigravity Gemini quota poller (see gemini-usage.js)
 let localMod = null;            // the pet's Claude Code mod on this PC (see claude-mod.js)
 let modBusy = null;             // what the Live Claude usage menu is doing, while it does it
 let userDataNote = null;        // what became of an older install's %APPDATA% folder, for the log (userDataDir)
@@ -971,6 +973,27 @@ function stopCodex() {
   setUsage({ codex: null });
 }
 
+function agyInstalled() {
+  return Boolean(findAgyBinary());
+}
+
+function startGeminiUsage() {
+  if (geminiUsage || DEMO || !settings.get('showGeminiUsage') || !settings.get('showUsage') || !agyInstalled()) return;
+  geminiUsage = new GeminiUsage({
+    cacheFile: path.join(os.homedir(), '.ttokttok-pet', 'gemini-usage.json'),
+    powerMonitor,
+  });
+  geminiUsage.on('change', (reading) => setUsage({ gemini: reading }));
+  geminiUsage.on('error', (err) => log('gemini usage:', err?.message || err));
+  geminiUsage.start();
+}
+
+function stopGeminiUsage({ clear = true } = {}) {
+  geminiUsage?.stop();
+  geminiUsage = null;
+  if (clear) setUsage({ gemini: null });
+}
+
 function startEtl() {
   etl = new EtlFeature({
     electron: { app, dialog, powerMonitor, safeStorage, shell },
@@ -1117,7 +1140,11 @@ function setUsage(patch) {
 }
 
 function currentUsage() {
-  return [...usageView({ claude: combineClaudeUsage(usage.claude), codex: codexAccounts?.count ? null : usage.codex }), ...(codexAccounts?.meter() || [])];
+  return [
+    ...usageView({ claude: combineClaudeUsage(usage.claude), codex: codexAccounts?.count ? null : usage.codex }),
+    ...(codexAccounts?.meter() || []),
+    ...usageView({ gemini: usage.gemini }),
+  ];
 }
 
 // Also runs every minute: a week can turn over, and figures can get old, with no news.
@@ -2051,6 +2078,8 @@ function appearanceMenu(folderMode) {
     checked: settings.get('showUsage'),
     click: (mi) => {
       settings.set({ showUsage: mi.checked });
+      if (mi.checked) startGeminiUsage();
+      else stopGeminiUsage({ clear: false });
       sendUsage();
     },
   });
@@ -2101,6 +2130,18 @@ function sourcesMenu() {
       click: (mi) => {
         settings.set({ codexOverSsh: mi.checked });
         codex?.setWatchHosts(mi.checked);
+      },
+    });
+  }
+  if (agyInstalled() && !DEMO) {
+    items.push({
+      label: 'Show Gemini usage',
+      type: 'checkbox',
+      checked: settings.get('showGeminiUsage'),
+      click: (mi) => {
+        settings.set({ showGeminiUsage: mi.checked });
+        if (mi.checked) startGeminiUsage();
+        else stopGeminiUsage();
       },
     });
   }
@@ -2423,7 +2464,7 @@ if (!app.requestSingleInstanceLock()) {
     });
     tracker.on('error', (err) => log('tracker error:', err?.message || err));
     if (DEMO) {
-      tracker.on('usage', ({ claude, codex }) => setUsage({ claude: claude ? [claude] : [], codex }));
+      tracker.on('usage', ({ claude, codex, gemini }) => setUsage({ claude: claude ? [claude] : [], codex, gemini }));
     } else {
       updateLocalMod();
       claudeUsage = new ClaudeUsage({
@@ -2458,6 +2499,7 @@ if (!app.requestSingleInstanceLock()) {
     }
     tracker.start();
     startCodex();
+    startGeminiUsage();
     if (!DEMO) {
       codexAccounts = new CodexAccountsFeature({
         electron: { BrowserWindow, shell, dialog },
@@ -2548,6 +2590,7 @@ if (!app.requestSingleInstanceLock()) {
     webchats?.stop();
     phone?.stop();
     claudeUsage?.stop();
+    geminiUsage?.stop();
     if (settings) settings.save();
   });
 

@@ -38,8 +38,11 @@ const STEPS = [
   ],
 ];
 
-// Weekly limits used with each step, in percent: [Claude, Codex].
-const USAGE = [[34, 12], [41, 20], [48, 33], [57, 52], [66, 78], [79, 91], [85, 94], [92, 97]];
+// Weekly limits used with each step, in percent: [Claude, Codex, Gemini].
+const USAGE = [
+  [34, 12, 18], [41, 20, 26], [48, 33, 39], [57, 52, 47],
+  [66, 78, 61], [79, 91, 74], [85, 94, 83], [92, 97, 90],
+];
 
 class DemoTracker extends EventEmitter {
   constructor({ stepMs = 6000 } = {}) {
@@ -52,12 +55,13 @@ class DemoTracker extends EventEmitter {
   start() {
     const emit = () => {
       const step = STEPS[this.i % STEPS.length];
-      const [claude, codex] = USAGE[this.i % USAGE.length];
+      const [claude, codex, gemini] = USAGE[this.i % USAGE.length];
       this.i += 1;
       const week = 7 * 86_400_000;
       this.emit('usage', {
         claude: { weekly: { percent: claude, resetsAt: now() + 0.45 * week, windowMs: week }, fiveHour: null, at: now() },
         codex: { weekly: { percent: codex, resetsAt: now() + 0.3 * week, windowMs: week }, fiveHour: null, at: now() },
+        gemini: { weekly: { percent: gemini, resetsAt: now() + 0.6 * week, windowMs: week }, fiveHour: null, at: now() },
       });
       this.emit('change', step.map((s, k) => ({
         id: `demo_${k}_${s.title}`,

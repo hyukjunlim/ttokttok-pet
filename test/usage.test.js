@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  combineClaudeUsage, formatDuration, nextWeeklyReset, parseModUsage, parseRateLimits, usageView, withWeeklyResets,
+  combineClaudeUsage, formatDuration, nextWeeklyReset, parseAgyQuota, parseModUsage, parseRateLimits, usageView, withWeeklyResets,
 } = require('../src/usage');
 
 const T0 = Date.parse('2026-09-25T04:00:00.000Z');
@@ -106,4 +106,39 @@ test('reset times read as the time left', () => {
   assert.equal(formatDuration(5 * HOUR + 20 * MINUTE), '5h');
   assert.equal(formatDuration(40 * MINUTE), '40m');
   assert.equal(formatDuration(10_000), '1m');
+});
+
+test("Antigravity's /quota output gives Gemini's used percentages and ignores Claude/GPT rows", () => {
+  const weekReset = '2026-09-28T04:00:00.000Z';
+  const fiveHourReset = '2026-09-25T07:00:00.000Z';
+  const stdout = [
+    `Gemini Models\tWeekly Limit Remaining\t68%\t${weekReset}`,
+    `Gemini Models\tFive Hour Limit Remaining\t85%\t${fiveHourReset}`,
+    'Claude and GPT models\tWeekly Limit Remaining\t20%\t2026-09-30T04:00:00.000Z',
+    'Claude and GPT models\tFive Hour Limit Remaining\t50%\t2026-09-25T08:00:00.000Z',
+  ].join('\r\n');
+  assert.deepEqual(parseAgyQuota(stdout, T0), {
+    weekly: { percent: 32, resetsAt: Date.parse(weekReset), windowMs: WEEK },
+    fiveHour: { percent: 15, resetsAt: Date.parse(fiveHourReset), windowMs: 5 * HOUR },
+    at: T0,
+  });
+  // Explicit "Used" wording stays as-is, missing reset is null, out-of-range percentages clamp.
+  assert.deepEqual(
+    parseAgyQuota('Gemini Models\tWeekly Limit Used\t110%\t\n', T0),
+    { weekly: { percent: 100, resetsAt: null, windowMs: WEEK }, fiveHour: null, at: T0 },
+  );
+  // Only Claude/GPT rows or garbage -> null.
+  assert.equal(parseAgyQuota('Claude and GPT models\tWeekly Limit Remaining\t40%\t2026-09-30T04:00:00Z', T0), null);
+  assert.equal(parseAgyQuota('not logged in', T0), null);
+  assert.equal(parseAgyQuota(null, T0), null);
+});
+
+test('usageView renders Gemini weekly usage with elapsed week progress and rolls over after reset', () => {
+  const gemini = { weekly: { percent: 32, resetsAt: T0 + 3 * DAY, windowMs: WEEK }, fiveHour: null, at: T0 - 2 * HOUR };
+  assert.deepEqual(usageView({ gemini }, T0), [
+    { app: 'gemini', name: 'Gemini', percent: 32, elapsed: 57, resetsIn: '3d', age: '2h' },
+  ]);
+  assert.deepEqual(usageView({ gemini }, T0 + 3 * DAY + MINUTE), [
+    { app: 'gemini', name: 'Gemini', percent: 0, elapsed: null, resetsIn: null, age: null },
+  ]);
 });

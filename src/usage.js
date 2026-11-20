@@ -1,6 +1,6 @@
 'use strict';
 
-// How much of this week's usage your Claude and Codex plans have used.
+// How much of this week's usage your Claude, Codex and Antigravity Gemini plans have used.
 //
 //   - Claude: Ttokttok Pet's mod (claude-mod/, see claude-mod.js) saves the account's limits after
 //     each reply of a Claude Code session, as Claude Code heard them, to ~/.ttokttok-pet/usage.json on
@@ -9,6 +9,8 @@
 //   - Codex: each reply's token_count event in a rollout carries the account's rate limits,
 //     { primary, secondary: { used_percent, window_minutes, resets_at } }. Which of the two is the
 //     weekly window depends on the plan.
+//   - Gemini: Antigravity CLI (`agy -p "/quota"`, see gemini-usage.js) prints tab-separated rows
+//     with remaining percentages and UTC reset timestamps for Gemini and Claude/GPT model pools.
 
 const DAY_MINUTES = 24 * 60;
 const WEEK_MINUTES = 7 * DAY_MINUTES;
@@ -63,6 +65,34 @@ function parseRateLimits(r, at) {
   return out.weekly || out.fiveHour ? out : null;
 }
 
+// What `agy -p "/quota"` prints for Gemini Models, at `at`: { weekly, fiveHour, at }, each window
+// { percent, resetsAt, windowMs } or null. Lines are tab-separated:
+//   Gemini Models	Weekly Limit Remaining	68%	2026-09-28T04:00:00Z
+// Percentages are remaining unless the label explicitly says "used"; convert to used %.
+function parseAgyQuota(stdout, at) {
+  if (typeof stdout !== 'string' || !Number.isFinite(at)) return null;
+  const out = { weekly: null, fiveHour: null, at };
+  for (const raw of stdout.split(/\r?\n/)) {
+    const parts = raw.split('\t').map((s) => s.trim());
+    if (parts.length < 3) continue;
+    const [group, label, pctText, resetText] = parts;
+    if (!group || !label || !pctText || !/gemini/i.test(group)) continue;
+    const match = /(-?\d+(?:\.\d+)?)\s*%/.exec(pctText);
+    if (!match) continue;
+    const rawPct = Number(match[1]);
+    if (!Number.isFinite(rawPct)) continue;
+    const clamped = Math.min(100, Math.max(0, rawPct));
+    const used = /used/i.test(label) && !/remaining/i.test(label)
+      ? clamped
+      : Math.round((100 - clamped) * 1e4) / 1e4;
+    const parsedReset = resetText ? Date.parse(resetText) : NaN;
+    const resetsAt = Number.isFinite(parsedReset) ? parsedReset : null;
+    if (/week/i.test(label)) out.weekly = { percent: used, resetsAt, windowMs: WEEK_MS };
+    else if (/five[ _-]?hour|5[ _-]?hour|5h/i.test(label)) out.fiveHour = { percent: used, resetsAt, windowMs: FIVE_HOURS_MS };
+  }
+  return out.weekly || out.fiveHour ? out : null;
+}
+
 // Claude's weekly limit resets at the same time every week, a time set for your account. `anchor`
 // is any one of those resets; it gives them all, so figures from before a reset read as a fresh
 // week after it, until the next reply.
@@ -80,10 +110,10 @@ function nextWeeklyReset(anchor, t) {
 // `percent` is how much of the limit is used and `elapsed` how much of the week has gone by, so
 // using more than `elapsed` means you'd run out before the reset. Without a known reset time,
 // `elapsed` and `resetsIn` are null.
-function usageView({ claude = null, codex = null } = {}, now = Date.now()) {
+function usageView({ claude = null, codex = null, gemini = null } = {}, now = Date.now()) {
   const out = [];
   const pct = (n) => Math.round(Math.min(100, Math.max(0, n)));
-  for (const [app, name, u] of [['claude', 'Claude', claude], ['codex', 'Codex', codex]]) {
+  for (const [app, name, u] of [['claude', 'Claude', claude], ['codex', 'Codex', codex], ['gemini', 'Gemini', gemini]]) {
     const w = u?.weekly;
     if (!w || !Number.isFinite(w.percent)) continue;
     const reset = w.resetsAt != null && w.resetsAt <= now;   // a new week began since these figures
@@ -112,5 +142,5 @@ function formatDuration(ms) {
 }
 
 module.exports = {
-  combineClaudeUsage, formatDuration, nextWeeklyReset, parseModUsage, parseRateLimits, usageView, withWeeklyResets,
+  combineClaudeUsage, formatDuration, nextWeeklyReset, parseAgyQuota, parseModUsage, parseRateLimits, usageView, withWeeklyResets,
 };
