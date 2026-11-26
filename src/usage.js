@@ -11,6 +11,9 @@
 //     weekly window depends on the plan.
 //   - Gemini: Antigravity CLI (`agy -p "/quota"`, see gemini-usage.js) prints tab-separated rows
 //     with remaining percentages and UTC reset timestamps for Gemini and Claude/GPT model pools.
+//   - Paseo: when the Paseo desktop app / CLI is available, `paseo usage ls --json` (see
+//     paseo-usage.js) returns normalized quota reports for Claude (preferring Fable's weekly
+//     window over the overall weekly window), Codex, and Antigravity Gemini in one call.
 
 const DAY_MINUTES = 24 * 60;
 const WEEK_MINUTES = 7 * DAY_MINUTES;
@@ -93,6 +96,99 @@ function parseAgyQuota(stdout, at) {
   return out.weekly || out.fiveHour ? out : null;
 }
 
+// What `paseo usage ls --json` returns for Claude, Codex and Antigravity Gemini, at `now`:
+// { claude, codex, gemini }, each { weekly, fiveHour, at } or null (or null if none has a weekly
+// window). For Claude, Fable's weekly window (`weekly_model_fable`) is preferred as the weekly
+// limit when present, falling back to the overall `weekly` window otherwise.
+function parsePaseoUsage(payload, now = Date.now()) {
+  let entries = payload;
+  if (typeof payload === 'string') {
+    try {
+      entries = JSON.parse(payload);
+    } catch {
+      return null;
+    }
+  }
+  if (!Array.isArray(entries)) return null;
+
+  const isWeeklyWindow = (w) => (
+    (Number.isFinite(w?.durationSeconds) && w.durationSeconds >= (WEEK_MINUTES - DAY_MINUTES) * 60)
+    || /(?:^|[_-])week(?:ly)?(?:$|[_-])/i.test(String(w?.id || ''))
+  );
+  const isFiveHourWindow = (w) => (
+    (Number.isFinite(w?.durationSeconds) && w.durationSeconds > 0 && w.durationSeconds <= DAY_MINUTES * 60)
+    || /(?:^|[_-])(?:five_hour|5h)(?:$|[_-])/i.test(String(w?.id || ''))
+  );
+  const toWindow = (w, fallbackWindowMs, repeats = false) => {
+    if (!w || typeof w !== 'object') return null;
+    let percent = null;
+    if (Number.isFinite(w.usedPct)) {
+      percent = Math.min(100, Math.max(0, w.usedPct));
+    } else if (Number.isFinite(w.remainingPct)) {
+      const rem = Math.min(100, Math.max(0, w.remainingPct));
+      percent = Math.round((100 - rem) * 1e4) / 1e4;
+    }
+    if (percent == null) return null;
+    const parsedReset = typeof w.resetsAt === 'string' && w.resetsAt ? Date.parse(w.resetsAt) : NaN;
+    const resetsAt = Number.isFinite(parsedReset) ? parsedReset : null;
+    const windowMs = Number.isFinite(w.durationSeconds) && w.durationSeconds > 0
+      ? w.durationSeconds * 1000
+      : fallbackWindowMs;
+    return repeats && resetsAt != null ? { percent, resetsAt, windowMs, repeats: true } : { percent, resetsAt, windowMs };
+  };
+
+  const out = { claude: null, codex: null, gemini: null };
+  const putIfNewer = (key, reading) => {
+    if (!reading?.weekly) return;
+    if (!out[key] || reading.at >= out[key].at) out[key] = reading;
+  };
+
+  for (const entry of entries) {
+    if (!entry || typeof entry !== 'object') continue;
+    const report = entry.report;
+    if (report?.status !== 'available' || !Array.isArray(report.windows)) continue;
+    const sourceId = String(entry.sourceId || '').toLowerCase();
+    const parsedAt = Date.parse(entry.successfulAt || entry.fetchedAt || '');
+    const at = Number.isFinite(parsedAt) ? parsedAt : (Number.isFinite(now) ? now : Date.now());
+    const windows = report.windows;
+
+    if (sourceId === 'claude') {
+      const fable = windows.find((w) => /^weekly_model_fable$/i.test(String(w?.id || ''))
+        || (/fable/i.test(`${w?.id || ''} ${w?.label || ''}`) && isWeeklyWindow(w)));
+      const overall = windows.find((w) => String(w?.id || '').toLowerCase() === 'weekly')
+        || windows.find((w) => isWeeklyWindow(w) && !/model_/i.test(String(w?.id || '')));
+      const fiveHour = windows.find((w) => String(w?.id || '').toLowerCase() === 'five_hour' || isFiveHourWindow(w));
+      putIfNewer('claude', {
+        weekly: toWindow(fable || overall, WEEK_MS, true),
+        fiveHour: toWindow(fiveHour, FIVE_HOURS_MS),
+        at,
+      });
+    } else if (sourceId === 'codex') {
+      const weekly = windows.find((w) => String(w?.id || '').toLowerCase() === 'weekly')
+        || windows.find(isWeeklyWindow);
+      const fiveHour = windows.find((w) => String(w?.id || '').toLowerCase() === 'five_hour' || isFiveHourWindow(w));
+      putIfNewer('codex', {
+        weekly: toWindow(weekly, WEEK_MS),
+        fiveHour: toWindow(fiveHour, FIVE_HOURS_MS),
+        at,
+      });
+    } else if (sourceId === 'antigravity') {
+      const isGemini = (w) => /gemini/i.test(`${w?.id || ''} ${w?.label || ''}`);
+      const weekly = windows.find((w) => String(w?.id || '').toLowerCase() === 'gemini-weekly')
+        || windows.find((w) => isGemini(w) && isWeeklyWindow(w));
+      const fiveHour = windows.find((w) => String(w?.id || '').toLowerCase() === 'gemini-5h')
+        || windows.find((w) => isGemini(w) && isFiveHourWindow(w));
+      putIfNewer('gemini', {
+        weekly: toWindow(weekly, WEEK_MS),
+        fiveHour: toWindow(fiveHour, FIVE_HOURS_MS),
+        at,
+      });
+    }
+  }
+
+  return out.claude || out.codex || out.gemini ? out : null;
+}
+
 // Claude's weekly limit resets at the same time every week, a time set for your account. `anchor`
 // is any one of those resets; it gives them all, so figures from before a reset read as a fresh
 // week after it, until the next reply.
@@ -142,5 +238,5 @@ function formatDuration(ms) {
 }
 
 module.exports = {
-  combineClaudeUsage, formatDuration, nextWeeklyReset, parseAgyQuota, parseModUsage, parseRateLimits, usageView, withWeeklyResets,
+  combineClaudeUsage, formatDuration, nextWeeklyReset, parseAgyQuota, parseModUsage, parsePaseoUsage, parseRateLimits, usageView, withWeeklyResets,
 };

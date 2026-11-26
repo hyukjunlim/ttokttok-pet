@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  combineClaudeUsage, formatDuration, nextWeeklyReset, parseAgyQuota, parseModUsage, parseRateLimits, usageView, withWeeklyResets,
+  combineClaudeUsage, formatDuration, nextWeeklyReset, parseAgyQuota, parseModUsage, parsePaseoUsage, parseRateLimits, usageView, withWeeklyResets,
 } = require('../src/usage');
 
 const T0 = Date.parse('2026-09-25T04:00:00.000Z');
@@ -141,4 +141,87 @@ test('usageView renders Gemini weekly usage with elapsed week progress and rolls
   assert.deepEqual(usageView({ gemini }, T0 + 3 * DAY + MINUTE), [
     { app: 'gemini', name: 'Gemini', percent: 0, elapsed: null, resetsIn: null, age: null },
   ]);
+});
+
+test('parsePaseoUsage extracts Claude Fable weekly (preferring Fable over overall), Codex weekly, and Antigravity Gemini weekly', () => {
+  const claudeReset = '2026-09-29T19:00:00.000Z';
+  const codexReset = '2026-10-01T14:00:00.000Z';
+  const geminiReset = '2026-09-30T04:00:00.000Z';
+  const payload = [
+    {
+      sourceId: 'claude',
+      successfulAt: '2026-09-25T03:55:00.000Z',
+      report: {
+        status: 'available',
+        windows: [
+          { id: 'five_hour', usedPct: 6, resetsAt: '2026-09-25T08:00:00.000Z', durationSeconds: 18000 },
+          { id: 'weekly', usedPct: 21, resetsAt: claudeReset, durationSeconds: 604800 },
+          { id: 'weekly_model_fable', label: 'Weekly · Fable', usedPct: 37, resetsAt: claudeReset, durationSeconds: 604800 },
+        ],
+      },
+    },
+    {
+      sourceId: 'cursor',
+      report: { status: 'unavailable', problem: { kind: 'rejected', status: 401 } },
+    },
+    {
+      sourceId: 'codex',
+      successfulAt: '2026-09-25T03:58:00.000Z',
+      report: {
+        status: 'available',
+        windows: [
+          { id: 'weekly', usedPct: 12, resetsAt: codexReset, durationSeconds: 604800 },
+        ],
+      },
+    },
+    {
+      sourceId: 'antigravity',
+      successfulAt: '2026-09-25T03:59:00.000Z',
+      report: {
+        status: 'available',
+        windows: [
+          { id: 'gemini-weekly', label: 'Gemini · Weekly', usedPct: 18.5, resetsAt: geminiReset, durationSeconds: 604800 },
+          { id: 'gemini-5h', label: 'Gemini · 5h', usedPct: 4, resetsAt: '2026-09-25T07:00:00.000Z', durationSeconds: 18000 },
+          { id: '3p-weekly', label: 'Claude and GPT · Weekly', usedPct: 90, resetsAt: geminiReset, durationSeconds: 604800 },
+        ],
+      },
+    },
+  ];
+
+  const parsed = parsePaseoUsage(JSON.stringify(payload), T0);
+  assert.deepEqual(parsed, {
+    claude: {
+      weekly: { percent: 37, resetsAt: Date.parse(claudeReset), windowMs: WEEK, repeats: true },
+      fiveHour: { percent: 6, resetsAt: Date.parse('2026-09-25T08:00:00.000Z'), windowMs: 5 * HOUR },
+      at: Date.parse('2026-09-25T03:55:00.000Z'),
+    },
+    codex: {
+      weekly: { percent: 12, resetsAt: Date.parse(codexReset), windowMs: WEEK },
+      fiveHour: null,
+      at: Date.parse('2026-09-25T03:58:00.000Z'),
+    },
+    gemini: {
+      weekly: { percent: 18.5, resetsAt: Date.parse(geminiReset), windowMs: WEEK },
+      fiveHour: { percent: 4, resetsAt: Date.parse('2026-09-25T07:00:00.000Z'), windowMs: 5 * HOUR },
+      at: Date.parse('2026-09-25T03:59:00.000Z'),
+    },
+  });
+
+  // Falls back to overall Claude weekly when no Fable window is present.
+  const withoutFable = parsePaseoUsage([
+    {
+      sourceId: 'claude',
+      report: {
+        status: 'available',
+        windows: [{ id: 'weekly', remainingPct: 75, resetsAt: claudeReset, durationSeconds: 604800 }],
+      },
+    },
+  ], T0);
+  assert.deepEqual(withoutFable.claude.weekly, {
+    percent: 25, resetsAt: Date.parse(claudeReset), windowMs: WEEK, repeats: true,
+  });
+
+  // Invalid or unavailable payloads return null.
+  assert.equal(parsePaseoUsage('not json', T0), null);
+  assert.equal(parsePaseoUsage([{ sourceId: 'claude', report: { status: 'unavailable' } }], T0), null);
 });

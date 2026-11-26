@@ -21,6 +21,7 @@ const { timeline } = require('./timeline');
 const { combineClaudeUsage, usageView } = require('./usage');
 const { ClaudeUsage } = require('./claude-usage');
 const { GeminiUsage, findAgyBinary } = require('./gemini-usage');
+const { PaseoUsage, findPaseoLaunch } = require('./paseo-usage');
 const { LocalMod, bundledVersion, modFiles, runningWslDistros, sshInstaller, wslInstaller } = require('./claude-mod');
 const { isSameHost, sshConfigHosts } = require('./ssh-config');
 const { cleanShape, shapeForWindow, NO_SHAPE } = require('./shape');
@@ -129,8 +130,9 @@ const deleted = new Map();      // id -> when: chats deleted in the sidebar, lef
 let treeKey = '';
 let treeHosts = [];             // the tree last built for the sidebar, for its folders' menus
 let quitting = false;
-const usage = { claude: [], codex: null, gemini: null };   // Claude's readings from each place, Codex's and Gemini's newest (see usage.js)
+const usage = { claude: [], codex: null, gemini: null, paseo: null };   // Claude's readings from each place, Codex's, Gemini's, and Paseo's (see usage.js)
 let claudeUsage = null;         // where Claude's readings come from (see claude-usage.js)
+let paseoUsage = null;          // Paseo usage poller when Paseo is installed (see paseo-usage.js)
 let geminiUsage = null;         // Antigravity Gemini quota poller (see gemini-usage.js)
 let localMod = null;            // the pet's Claude Code mod on this PC (see claude-mod.js)
 let modBusy = null;             // what the Live Claude usage menu is doing, while it does it
@@ -977,8 +979,33 @@ function agyInstalled() {
   return Boolean(findAgyBinary());
 }
 
+function paseoUsageAvailable() {
+  return Boolean(findPaseoLaunch());
+}
+
+function startPaseoUsage() {
+  if (paseoUsage || DEMO || !settings.get('showUsage') || !paseoUsageAvailable()) return;
+  paseoUsage = new PaseoUsage({
+    cacheFile: path.join(os.homedir(), '.ttokttok-pet', 'paseo-usage.json'),
+    powerMonitor,
+  });
+  paseoUsage.on('change', (reading) => {
+    setUsage({ paseo: reading });
+    if (reading?.gemini) stopGeminiUsage({ clear: false });
+    else startGeminiUsage();
+  });
+  paseoUsage.on('error', (err) => log('paseo usage:', err?.message || err));
+  paseoUsage.start();
+}
+
+function stopPaseoUsage({ clear = true } = {}) {
+  paseoUsage?.stop();
+  paseoUsage = null;
+  if (clear) setUsage({ paseo: null });
+}
+
 function startGeminiUsage() {
-  if (geminiUsage || DEMO || !settings.get('showGeminiUsage') || !settings.get('showUsage') || !agyInstalled()) return;
+  if (geminiUsage || DEMO || !settings.get('showGeminiUsage') || !settings.get('showUsage') || !agyInstalled() || usage.paseo?.gemini) return;
   geminiUsage = new GeminiUsage({
     cacheFile: path.join(os.homedir(), '.ttokttok-pet', 'gemini-usage.json'),
     powerMonitor,
@@ -1140,10 +1167,14 @@ function setUsage(patch) {
 }
 
 function currentUsage() {
+  const paseo = usage.paseo;
   return [
-    ...usageView({ claude: combineClaudeUsage(usage.claude), codex: codexAccounts?.count ? null : usage.codex }),
+    ...usageView({
+      claude: paseo?.claude || combineClaudeUsage(usage.claude),
+      codex: codexAccounts?.count ? null : (paseo?.codex || usage.codex),
+    }),
     ...(codexAccounts?.meter() || []),
-    ...usageView({ gemini: usage.gemini }),
+    ...usageView({ gemini: settings.get('showGeminiUsage') ? (paseo?.gemini || usage.gemini) : null }),
   ];
 }
 
@@ -1337,7 +1368,7 @@ function liveUsageMenu() {
 // Asked once (a new install, or the first start after the pet gained the mod), as soon as Claude
 // Code turns up on this PC or in WSL.
 async function offerLiveUsage() {
-  if (DEMO || modBusy || settings.get('claudeModOffered') || modSetUpAnywhere()) return;
+  if (DEMO || modBusy || settings.get('claudeModOffered') || modSetUpAnywhere() || usage.paseo?.claude) return;
   if (gettingStarted?.isOpen) return;   // its Claude usage step asks; see startGettingStarted's closed
   const here = localMod.hasClaudeCode();
   const distros = wslDistros();
@@ -2078,8 +2109,13 @@ function appearanceMenu(folderMode) {
     checked: settings.get('showUsage'),
     click: (mi) => {
       settings.set({ showUsage: mi.checked });
-      if (mi.checked) startGeminiUsage();
-      else stopGeminiUsage({ clear: false });
+      if (mi.checked) {
+        startPaseoUsage();
+        startGeminiUsage();
+      } else {
+        stopPaseoUsage({ clear: false });
+        stopGeminiUsage({ clear: false });
+      }
       sendUsage();
     },
   });
@@ -2133,7 +2169,7 @@ function sourcesMenu() {
       },
     });
   }
-  if (agyInstalled() && !DEMO) {
+  if ((agyInstalled() || paseoUsageAvailable()) && !DEMO) {
     items.push({
       label: 'Show Gemini usage',
       type: 'checkbox',
@@ -2142,6 +2178,7 @@ function sourcesMenu() {
         settings.set({ showGeminiUsage: mi.checked });
         if (mi.checked) startGeminiUsage();
         else stopGeminiUsage();
+        sendUsage();
       },
     });
   }
@@ -2499,6 +2536,7 @@ if (!app.requestSingleInstanceLock()) {
     }
     tracker.start();
     startCodex();
+    startPaseoUsage();
     startGeminiUsage();
     if (!DEMO) {
       codexAccounts = new CodexAccountsFeature({
@@ -2590,6 +2628,7 @@ if (!app.requestSingleInstanceLock()) {
     webchats?.stop();
     phone?.stop();
     claudeUsage?.stop();
+    paseoUsage?.stop();
     geminiUsage?.stop();
     if (settings) settings.save();
   });
